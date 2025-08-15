@@ -3,6 +3,7 @@ import requests
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+import os
 
 # Логирование
 logging.basicConfig(
@@ -97,7 +98,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
-# /getlog — присылает файл только владельцу
+# /getlog — присылает файл только владельцу, проверяя наличие
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -106,8 +107,12 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Нет доступа")
         return
 
+    if not os.path.exists(USER_LOG_FILE):
+        await update.message.reply_text("Файл логов пока пуст или не создан.")
+        return
+
     try:
-        await update.message.reply_document(InputFile(USER_LOG_FILE))
+        await update.message.reply_document(InputFile(USER_LOG_FILE, filename="user_messages.txt"))
     except Exception as e:
         logging.error(f"Ошибка при отправке лога: {e}")
         await update.message.reply_text("Не удалось отправить лог-файл.")
