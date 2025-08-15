@@ -1,7 +1,7 @@
 import logging
 import requests
 from datetime import datetime
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 # Логирование
@@ -10,11 +10,14 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Макет токена
+# Токен бота
 TOKEN = "8486854020:AAFsauLPBLKNe2_IP5brpeytH4TUAF8AB6A"
 
-# Файл для хранения сообщений пользователей
-USER_LOG_FILE = r"G:\1111x6\user_messages.txt"
+# Лог-файл для сообщений пользователей
+USER_LOG_FILE = "user_messages.txt"
+
+# Твой Telegram ID для получения лога
+OWNER_ID = 741409144
 
 def log_user_message(user, text):
     """Сохраняем данные пользователя и сообщение в файл"""
@@ -94,9 +97,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
+# /getlog — присылает файл только владельцу
+async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    log_user_message(user, "/getlog")
+
+    if user.id != OWNER_ID:
+        await update.message.reply_text("Нет доступа")
+        return
+
+    try:
+        await update.message.reply_document(InputFile(USER_LOG_FILE))
+    except Exception as e:
+        logging.error(f"Ошибка при отправке лога: {e}")
+        await update.message.reply_text("Не удалось отправить лог-файл.")
+
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("getlog", getlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logging.info("Бот запущен...")
