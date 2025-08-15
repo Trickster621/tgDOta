@@ -14,11 +14,15 @@ logging.basicConfig(
 # Токен бота
 TOKEN = "8486854020:AAFsauLPBLKNe2_IP5brpeytH4TUAF8AB6A"
 
-# Лог-файл для сообщений пользователей
-USER_LOG_FILE = "user_messages.txt"
+# Путь к лог-файлу
+USER_LOG_FILE = os.path.join(os.getcwd(), "user_messages.txt")
 
 # Твой Telegram ID для получения лога
 OWNER_ID = 741409144
+
+# Создаём файл заранее, если его нет
+if not os.path.exists(USER_LOG_FILE):
+    open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
     """Сохраняем данные пользователя и сообщение в файл"""
@@ -40,7 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
-# обработка сообщений
+# Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
@@ -112,6 +116,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Отправка файла с указанием имени
         await update.message.reply_document(InputFile(USER_LOG_FILE, filename="user_messages.txt"))
     except Exception as e:
         logging.error(f"Ошибка при отправке лога: {e}")
@@ -129,7 +134,7 @@ def main():
     except Exception as e:
         logging.error(f"Ошибка при запуске бота: {e}")
     finally:
-        input("Нажмите Enter для выхода...")  # окно не закроется сразу
+        input("Нажмите Enter для выхода...")
 
 if __name__ == "__main__":
     main()
