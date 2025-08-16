@@ -2,7 +2,7 @@ import logging
 import requests
 from datetime import datetime
 from io import BytesIO
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
 
@@ -15,10 +15,10 @@ logging.basicConfig(
 # Токен бота
 TOKEN = "8486854020:AAFsauLPBLKNe2_IP5brpeytH4TUAF8AB6A"
 
-# Абсолютный путь к лог-файлу на Railway
+# Путь к лог-файлу на Railway
 USER_LOG_FILE = "/app/user_messages.txt"
 
-# Твой Telegram ID для получения лога
+# Telegram ID владельца
 OWNER_ID = 741409144
 
 # Создаём файл заранее, если его нет
@@ -117,23 +117,46 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Читаем содержимое файла и создаём in-memory файл
         with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         bio = BytesIO()
         bio.write(content.encode("utf-8"))
         bio.seek(0)
-
-        # Отправляем документ
         await update.message.reply_document(document=bio, filename="user_messages.txt")
     except Exception as e:
         logging.error(f"Ошибка при отправке лога: {e}")
         await update.message.reply_text("Не удалось отправить лог-файл.")
 
+# /previewlog — показывает последние 50 строк прямо в чате
+async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    log_user_message(user, "/previewlog")
+
+    if user.id != OWNER_ID:
+        await update.message.reply_text("Нет доступа")
+        return
+
+    if not os.path.exists(USER_LOG_FILE):
+        await update.message.reply_text("Файл логов пока пуст или не создан.")
+        return
+
+    try:
+        with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        last_lines = "".join(lines[-50:]) if lines else "(пусто)"
+        # Ограничение длины сообщения
+        if len(last_lines) > 3500:
+            last_lines = last_lines[-3500:]
+        await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
+    except Exception as e:
+        logging.error(f"Ошибка при previewlog: {e}")
+        await update.message.reply_text("Не удалось прочитать лог.")
+
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
+    app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logging.info("Бот запущен...")
