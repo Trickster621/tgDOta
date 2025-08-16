@@ -27,7 +27,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем Playwright и браузеры
-RUN playwright install --with-deps
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+RUN playwright install chromium --with-deps && \
+    rm -rf /root/.cache/ms-playwright
 
 # Копируем код
 COPY . .
