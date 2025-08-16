@@ -30,7 +30,7 @@ OWNER_ID = 741409144  # Замените на ваш Telegram ID, если ну�
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 # Прямой URL к API для получения обновлений
-API_UPDATES_URL = "https://dota1x6.com/api/v2/patches?page=1&count=20"
+API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -79,7 +79,7 @@ def get_latest_update():
             return None
             
         return updates_list[0]
-        
+            
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
         return None
@@ -241,4 +241,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
