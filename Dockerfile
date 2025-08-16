@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     libatspi2.0-0 \
+    fonts-unifont \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем Python зависимости
@@ -28,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем Playwright и браузеры
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
-RUN playwright install chromium --with-deps && \
+RUN playwright install chromium && \
     rm -rf /root/.cache/ms-playwright
 
 # Копируем код
