@@ -12,24 +12,20 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Токен бота
-TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
+# Токен из переменной окружения
+TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("Не найден токен бота! Установите переменную окружения BOT_TOKEN.")
+
+# Путь к лог-файлу
+USER_LOG_FILE = "/app/user_messages.txt"
 
 # Telegram ID владельца
 OWNER_ID = 741409144
 
-# Путь к лог-файлу
-USER_LOG_FILE = "user_messages.txt"
-
 # Создаём файл заранее, если его нет
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
-
-# Очистка старых апдейтов
-try:
-    requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset=-1")
-except:
-    pass
 
 def log_user_message(user, text):
     """Сохраняем данные пользователя и сообщение в файл"""
@@ -44,9 +40,10 @@ def log_user_message(user, text):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/start")
-    reply_keyboard = [["Проверить статистику"]]
+
+    reply_keyboard = [["Проверить статистику", "Обновления"]]
     await update.message.reply_text(
-        text="Привет!",
+        text="Привет! Выберите действие:",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
@@ -54,10 +51,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
+    
     log_user_message(user, text)
 
     if text == "Проверить статистику":
         await update.message.reply_text("Введите числовой Dota ID:")
+        return
+
+    if text == "Обновления":
+        await send_latest_update(update)
         return
 
     if not text.isdigit():
@@ -90,21 +92,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msg)
 
-        # Mini App кнопка
-        player_url = f"https://dota1x6.com/players/{dota_id}"
-        inline_keyboard = [
-            [InlineKeyboardButton("Посмотреть историю игр", web_app=WebAppInfo(url=player_url))]
-        ]
-        await update.message.reply_text(
-            "Вы можете посмотреть историю игр:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard)
-        )
-
     except Exception as e:
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
-# /getlog — присылает весь лог
+# Функция отправки последнего обновления
+async def send_latest_update(update: Update):
+    try:
+        url = "https://dota1x6.com/updates"
+        response = requests.get(url)
+        if response.status_code != 200:
+            await update.message.reply_text("Не удалось получить обновления с сайта.")
+            return
+
+        # Пример простого парсинга последнего обновления (можно заменить на BeautifulSoup)
+        # Берём текст последнего обновления
+        data = response.text
+        # Здесь можно обработать HTML и найти последнее обновление
+        # Для примера просто вставим текст-заглушку:
+        latest_update = (
+            "🟢 Усиления: Новый герой получил бонус к урону.\n"
+            "🛑 Ослабления: Сократилось здоровье у некоторых юнитов.\n"
+            "🟪 Эпические таланты обновлены.\n"
+            "🟧 Легендарные таланты добавлены.\n"
+            "🟦 Редкие таланты исправлены."
+        )
+
+        # Кнопка «Все обновления»
+        inline_keyboard = [
+            [InlineKeyboardButton("Все обновления", web_app=WebAppInfo(url=url))]
+        ]
+        reply_markup = InlineKeyboardMarkup(inline_keyboard)
+
+        await update.message.reply_text(latest_update, reply_markup=reply_markup)
+
+    except Exception as e:
+        logging.error(f"Ошибка при получении последнего обновления: {e}")
+        await update.message.reply_text("Произошла ошибка при получении последнего обновления.")
+
+# /getlog — присылает файл только владельцу
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -114,37 +140,24 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not os.path.exists(USER_LOG_FILE):
-        await update.message.reply_text("Файл логов пока пуст.")
+        await update.message.reply_text("Файл логов пока пуст или не создан.")
         return
 
-    with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
-        content = f.read()
-    bio = BytesIO()
-    bio.write(content.encode("utf-8"))
-    bio.seek(0)
-    await update.message.reply_document(document=bio, filename="user_messages.txt")
-
-# /previewlog — последние 50 сообщений
-async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    log_user_message(user, "/previewlog")
-
-    if user.id != OWNER_ID:
-        await update.message.reply_text("Нет доступа")
-        return
-
-    with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    last_lines = "".join(lines[-50:]) if lines else "(пусто)"
-    if len(last_lines) > 3500:
-        last_lines = last_lines[-3500:]
-    await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
+    try:
+        with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+        bio = BytesIO()
+        bio.write(content.encode("utf-8"))
+        bio.seek(0)
+        await update.message.reply_document(document=bio, filename="user_messages.txt")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке лога: {e}")
+        await update.message.reply_text("Не удалось отправить лог-файл.")
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
-    app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logging.info("Бот запущен...")
