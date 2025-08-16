@@ -1,11 +1,11 @@
-# bot.py — финальная интегрированная версия (ReplyKeyboard + ConversationHandler + updates via API)
+# bot.py — финальная версия (ReplyKeyboard + ConversationHandler + updates via API + cloudscraper)
 import logging
 import os
 from io import BytesIO
 from urllib.parse import urljoin
 from datetime import datetime
 
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 from telegram import (
     Update,
@@ -36,6 +36,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ---------- cloudscraper ----------
+scraper = cloudscraper.create_scraper()
+
 # ---------- Утилиты ----------
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
@@ -58,7 +61,7 @@ WAITING_FOR_DOTA_ID = 1
 def fetch_updates_list_first_item():
     """Парсит HTML /updates и возвращает dict с {title, url} для самого свежего обновления."""
     try:
-        r = requests.get(f"{BASE_URL}/updates", timeout=10)
+        r = scraper.get(f"{BASE_URL}/updates", timeout=10)
         if r.status_code != 200:
             logger.warning("Updates page returned %s", r.status_code)
             return None
@@ -66,14 +69,17 @@ def fetch_updates_list_first_item():
 
         tbody = soup.find("tbody")
         if not tbody:
+            logger.warning("tbody not found")
             return None
 
         first_row = tbody.find("tr")
         if not first_row:
+            logger.warning("first tr not found")
             return None
 
         link_tag = first_row.find("a", href=True)
         if not link_tag:
+            logger.warning("link not found in first row")
             return None
 
         title = link_tag.get_text(strip=True)
@@ -90,12 +96,11 @@ def fetch_update_detail(link_or_slug):
         return None
     full_link = link_or_slug if link_or_slug.startswith("http") else urljoin(BASE_URL, link_or_slug)
     try:
-        r = requests.get(full_link, timeout=10)
+        r = scraper.get(full_link, timeout=10)
         if r.status_code != 200:
             logger.warning("detail page returned %s for %s", r.status_code, full_link)
             return None
         soup = BeautifulSoup(r.text, "html.parser")
-        # Ищем контейнер с контентом
         content = (
             soup.find("div", class_="update-content")
             or soup.find("article")
@@ -125,7 +130,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
-# Обработчик: кнопка "Обновления"
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Обновления")
@@ -139,19 +143,17 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"{item['title']}\n\n(не удалось загрузить содержимое)")
         return
 
-    # отправляем текст
     text_to_send = f"{detail['title']}\n\n{detail['text']}"
     if len(text_to_send) > 3900:
         text_to_send = text_to_send[:3900] + "\n\n(текст обрезан)"
     await update.message.reply_text(text_to_send)
 
-    # отправляем картинки
     for img_url in detail["images"]:
         try:
             await update.message.reply_photo(photo=img_url)
         except Exception:
             try:
-                r = requests.get(img_url, timeout=10)
+                r = scraper.get(img_url, timeout=10)
                 if r.status_code == 200 and r.content:
                     bio = BytesIO(r.content)
                     bio.name = os.path.basename(img_url)
@@ -164,14 +166,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     kb = [[InlineKeyboardButton("Все обновления", url=f"{BASE_URL}/updates")]]
     await update.message.reply_text("Смотреть все обновления:", reply_markup=InlineKeyboardMarkup(kb))
 
-# Conversation: старт проверки статистики
+# Проверка статистики
 async def check_stats_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Проверить статистику (start)")
     await update.message.reply_text("Введите числовой Dota ID:")
     return WAITING_FOR_DOTA_ID
 
-# Conversation: получили ID
 async def check_stats_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text.strip()
@@ -184,7 +185,7 @@ async def check_stats_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dota_id = text
     url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
     try:
-        r = requests.get(url, timeout=10)
+        r = scraper.get(url, timeout=10)
         if r.status_code != 200:
             await update.message.reply_text("Не удалось получить данные с API.")
             return ConversationHandler.END
@@ -210,19 +211,19 @@ async def check_stats_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inline = [[InlineKeyboardButton("Посмотреть историю игр", web_app=WebAppInfo(url=player_url))]]
         await update.message.reply_text("Вы можете посмотреть историю игр:", reply_markup=InlineKeyboardMarkup(inline))
 
-    except Exception as e:
+    except Exception:
         logger.exception("Ошибка при получении статистики")
         await update.message.reply_text("Произошла ошибка при получении данных.")
     return ConversationHandler.END
 
-# /cancel — выйти из Conversation
+# Cancel
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "/cancel")
     await update.message.reply_text("Отменено.")
     return ConversationHandler.END
 
-# /getlog для владельца
+# /getlog
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "/getlog")
