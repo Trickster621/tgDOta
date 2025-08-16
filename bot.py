@@ -1,6 +1,7 @@
 import logging
 import requests
 from datetime import datetime
+from io import BytesIO
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
@@ -116,8 +117,15 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Отправляем файл с реальным содержимым
-        await update.message.reply_document(InputFile(USER_LOG_FILE, filename="user_messages.txt"))
+        # Читаем содержимое файла и создаём in-memory файл
+        with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+        bio = BytesIO()
+        bio.write(content.encode("utf-8"))
+        bio.seek(0)
+
+        # Отправляем документ
+        await update.message.reply_document(document=bio, filename="user_messages.txt")
     except Exception as e:
         logging.error(f"Ошибка при отправке лога: {e}")
         await update.message.reply_text("Не удалось отправить лог-файл.")
