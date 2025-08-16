@@ -74,13 +74,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         # Шаг 1: Получаем страницу со списком обновлений
         updates_page_response = scraper.get(UPDATES_PAGE_URL, timeout=10)
-        updates_page_response.raise_for_status() # Вызывает ошибку для плохих HTTP-кодов
+        updates_page_response.raise_for_status()
 
         updates_soup = BeautifulSoup(updates_page_response.text, "html.parser")
         
-        # Шаг 2: Находим ссылку на последнее обновление
-        # Поиск первой ссылки на обновление. Она имеет класс "updates-item-link"
-        latest_update_link = updates_soup.find("a", class_="updates-item-link")
+        # Шаг 2: Находим ссылку на последнее обновление, используя новый селектор
+        latest_update_link = updates_soup.find("a", class_="updates-item")
         
         if not latest_update_link:
             await update.message.reply_text("Не удалось найти ссылки на обновления на сайте. Попробуйте позже.")
