@@ -2,7 +2,6 @@ import logging
 import requests
 from datetime import datetime
 from io import BytesIO
-from bs4 import BeautifulSoup
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
@@ -25,9 +24,13 @@ if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
+    """Сохраняем данные пользователя и сообщение в файл"""
     with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()} | ID: {user.id} | Имя: {user.first_name} | "
-                f"Фамилия: {user.last_name} | Username: @{user.username} | Сообщение: {text}\n")
+        f.write(
+            f"{datetime.now()} | ID: {user.id} | "
+            f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
+            f"Username: @{user.username} | Сообщение: {text}\n"
+        )
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -35,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(user, "/start")
     reply_keyboard = [["Проверить статистику", "Обновления"]]
     await update.message.reply_text(
-        "Привет! Выберите действие:",
+        text="Привет! Выберите действие:",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
@@ -57,6 +60,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Неизвестная команда. Используйте кнопки ниже.")
         return
 
+    # Статистика игрока
     dota_id = text
     url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
     try:
@@ -75,10 +79,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         first_places = data.get("firstPlaces", "неизвестно")
         rating = data.get("rating", "неизвестно")
 
-        msg = (f"Всего игр: {match_count}\n"
-               f"Среднее место: {avg_place}\n"
-               f"Первых мест: {first_places}\n"
-               f"Рейтинг: {rating}")
+        msg = (
+            f"Всего игр: {match_count}\n"
+            f"Среднее место: {avg_place}\n"
+            f"Первых мест: {first_places}\n"
+            f"Рейтинг: {rating}"
+        )
         await update.message.reply_text(msg)
 
         # Mini App кнопка
@@ -95,30 +101,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
-# Последнее обновление
+# Последнее обновление через API
 async def send_last_update(update: Update):
     try:
-        url = "https://dota1x6.com/updates"
-        response = requests.get(url)
-        if response.status_code != 200:
+        url = "https://dota1x6.com/updates/?page=1&count=20"
+        resp = requests.get(url)
+        if resp.status_code != 200:
             await update.message.reply_text("Не удалось получить последние обновления.")
             return
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        # Берем первую строчку обновления
-        first_update = soup.find("td") or soup.find("div", class_="update-row")
-        if not first_update:
-            await update.message.reply_text("Не удалось найти последнее обновление.")
+        data = resp.json().get("data")
+        if not data or len(data) == 0:
+            await update.message.reply_text("Нет доступных обновлений.")
             return
 
-        text_update = first_update.get_text(strip=True)
-        await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
+        last_update = data[0]
+        title = last_update.get("title", "Без названия")
+        link = last_update.get("url")
+        full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
+        content = last_update.get("content", "Нет содержимого.")
+
+        await update.message.reply_text(f"Последнее обновление: {title}\n\n{content}")
+
+        # Кнопка "Все обновления"
+        inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
+        await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
 
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
 
-# Логи владельцу
+# /getlog — присылает весь лог
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -128,7 +141,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not os.path.exists(USER_LOG_FILE):
-        await update.message.reply_text("Файл логов пуст.")
+        await update.message.reply_text("Файл логов пока пуст.")
         return
 
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
@@ -138,6 +151,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio.seek(0)
     await update.message.reply_document(document=bio, filename="user_messages.txt")
 
+# /previewlog — последние 50 сообщений
 async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/previewlog")
