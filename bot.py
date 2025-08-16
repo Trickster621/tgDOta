@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
-from requests_html import AsyncHTMLSession
 
 # Логирование
 logging.basicConfig(
@@ -23,7 +22,7 @@ OWNER_ID = 741409144
 # Путь к лог-файлу
 USER_LOG_FILE = "user_messages.txt"
 if not os.path.exists(USER_LOG_FILE):
-    open(USER_LOG_FILE, "w", encoding="utf-8").close()
+，所以:    open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
     """Сохраняем данные пользователя и сообщение в файл"""
@@ -63,7 +62,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     dota_id = text
-    url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
+    url = f https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
     try:
         response = requests.get(url)
         if response.status_code != 200:
@@ -105,22 +104,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_last_update(update: Update):
     try:
         url = "https://dota1x6.com/updates"
-        session = AsyncHTMLSession()
-        r = await session.get(url)
-        await r.html.arender(timeout=30)
-        soup = BeautifulSoup(r.html.html, "html.parser")
-        
-        # Предполагаем структуру таблицы; настрой селекторы под реальный HTML
-        table = soup.find("table") or soup.find("div", {"role": "table"})
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            await update.message.reply_text("Не удалось получить обновления с сайта.")
+            return
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
         if not table:
             await update.message.reply_text("Не удалось найти таблицу обновлений.")
             return
-        
+
         rows = table.find_all("tr")[1:]  # Пропускаем заголовок
         if not rows:
             await update.message.reply_text("Нет обновлений.")
             return
-        
+
         first_row = rows[0]
         tds = first_row.find_all("td")
         title_a = tds[0].find("a")
@@ -128,26 +127,29 @@ async def send_last_update(update: Update):
             text_update = tds[0].get_text(strip=True)
             await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
             return
-        
+
         title = title_a.get_text(strip=True)
         link = title_a["href"]
         full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
-        
+
         # Загружаем страницу обновления
-        r_detail = await session.get(full_link)
-        await r_detail.html.arender(timeout=30)
-        soup_detail = BeautifulSoup(r_detail.html.html, "html.parser")
-        
-        # Извлекаем содержимое; настрой селектор (например, основной div контента)
+        r_detail = requests.get(full_link, timeout=10)
+        if r_detail.status_code != 200:
+            await update.message.reply_text("Не удалось загрузить страницу обновления.")
+            return
+
+        soup_detail = BeautifulSoup(r_detail.text, "html.parser")
         content_div = soup_detail.find("div", class_="update-content") or soup_detail.find("article") or soup_detail.body
         content_text = content_div.get_text(strip=True, separator="\n") if content_div else "Нет содержимого."
-        
+
         await update.message.reply_text(f"Последнее обновление: {title}\n\n{content_text}")
-        
+
         # Скачиваем и отправляем картинки
         images = content_div.find_all("img") if content_div else []
         for img in images:
-            img_src = img["src"]
+            img_src = img.get("src")
+            if not img_src:
+                continue
             img_url = img_src if img_src.startswith("https://") else f"https://dota1x6.com{img_src}"
             try:
                 img_resp = requests.get(img_url, timeout=10)
@@ -155,17 +157,14 @@ async def send_last_update(update: Update):
                     await update.message.reply_photo(photo=BytesIO(img_resp.content))
             except:
                 pass
-        
+
         # Кнопка "Все обновления"
         inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
         await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
-    
+
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
-        
-    finally:
-        await session.close()
 
 # /getlog — присылает весь лог
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,7 +172,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(user, "/getlog")
 
     if user.id != OWNER_ID:
-        await update.message.reply_text("Нет доступа")
+        await update.message.reply_text("Нет accès")
         return
 
     if not os.path.exists(USER_LOG_FILE):
