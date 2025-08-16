@@ -1,6 +1,6 @@
 python-telegram-bot==20.3
 requests
 beautifulsoup4
-requests-html
-lxml_html_clean
+
+
 
