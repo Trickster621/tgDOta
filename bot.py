@@ -162,7 +162,6 @@ async def send_last_update(update: Update):
         inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
         await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
 
- resolutions
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
@@ -194,7 +193,6 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user.id != OWNER_ID:
         await update.message.reply_text("Нет доступа")
- возвращает
         return
 
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
