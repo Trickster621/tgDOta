@@ -16,14 +16,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
-logger = logging.getLogger(__name__) # Используем именованный логгер
+logger = logging.getLogger(__name__)
 
 # --- Конфигурация бота ---
 TOKEN = os.environ.get("BOT_TOKEN")
 if not TOKEN:
     logger.error("Переменная окружения BOT_TOKEN не установлена!")
-    # В продакшене бот не запустится без токена, но для локального тестирования можно раскомментировать:
-    # TOKEN = "ВАШ_ТЕЛЕГРАМ_ТОКЕН"
+    # В продакшене бот не запустится без токена
 
 OWNER_ID = 741409144 # Замените на ваш Telegram ID
 
@@ -58,26 +57,27 @@ async def install_playwright_browsers():
     """
     logger.info("Проверка и установка браузеров Playwright...")
     try:
-        # Команда для установки Chromium
         cmd = [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"]
         logger.info(f"Выполнение команды: {' '.join(cmd)}")
         
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+        # Используем subprocess.run для синхронного выполнения
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600 # 10 минут
         )
-        stdout, stderr = await process.communicate()
-
-        if process.returncode == 0:
+        
+        if result.returncode == 0:
             logger.info("Playwright Chromium установлен успешно или уже был установлен.")
-            if stdout:
-                logger.debug(f"Playwright install stdout: {stdout.decode()}")
+            if result.stdout:
+                logger.debug(f"Playwright install stdout: {result.stdout}")
         else:
-            logger.error(f"Ошибка установки Playwright. Код возврата: {process.returncode}")
-            if stderr:
-                logger.error(f"Playwright install stderr: {stderr.decode()}")
-            # Не останавливаем запуск, возможно, браузер уже есть
+            logger.error(f"Ошибка установки Playwright. Код возврата: {result.returncode}")
+            if result.stderr:
+                logger.error(f"Playwright install stderr: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        logger.error("Таймаут при установке браузеров Playwright.")
     except Exception as e:
         logger.error(f"Неожиданная ошибка при установке браузеров Playwright: {e}", exc_info=True)
 
@@ -118,7 +118,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         response = requests.get(url, timeout=15)
-        response.raise_for_status() # Проверка на HTTP ошибки
+        response.raise_for_status()
         
         data = response.json().get("data")
         if not data:
@@ -155,7 +155,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except requests.exceptions.RequestException as e:
         logger.error(f"Ошибка сети при запросе к API для ID {dota_id}: {e}")
         await update.message.reply_text("⚠️ Ошибка подключения к API.")
-    except ValueError as e: # Ошибки парсинга JSON
+    except ValueError as e:
         logger.error(f"Ошибка парсинга JSON от API для ID {dota_id}: {e}")
         await update.message.reply_text("⚠️ Получены некорректные данные от API.")
     except Exception as e:
@@ -173,24 +173,16 @@ async def send_last_update(update: Update):
         # --- Получение и рендеринг главной страницы обновлений ---
         logger.info(f"Запуск Playwright для {url}")
         async with async_playwright() as p:
-            # Запуск браузера
-            browser = await p.chromium.launch(
-                headless=True,
-                # args=['--no-sandbox'] # Часто требуется в Docker-контейнерах
-            )
+            browser = await p.chromium.launch(headless=True)
             logger.debug("Браузер запущен.")
             
             page = await browser.new_page()
             logger.debug(f"Переход на {url}")
             
-            # Переход на страницу и ожидание загрузки
             await page.goto(url, wait_until='networkidle', timeout=30000)
             logger.debug("Страница загружена, жду выполнения JS...")
-            
-            # Дополнительное ожидание для полной загрузки контента
             await page.wait_for_timeout(5000)
             
-            # Получение отрендеренного HTML
             html_content = await page.content()
             logger.debug(f"HTML получен, длина: {len(html_content)} символов.")
             await browser.close()
@@ -199,64 +191,34 @@ async def send_last_update(update: Update):
         logger.debug("Парсинг HTML списка обновлений...")
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # Проверка, загрузилась ли страница корректно
         if "You need to enable JavaScript" in html_content:
             logger.warning("Страница обновлений всё ещё показывает заглушку JavaScript.")
-            # Можно попробовать увеличить wait_for_timeout или использовать wait_for_selector
-            # для ожидания конкретного элемента
         
-        # Поиск контейнера с обновлениями
-        # Структура может быть разной, пробуем несколько вариантов
-        updates_container = None
-        # Часто обновления находятся внутри <main>, <div id="root">, или <div> с определенным классом
-        potential_containers = [
-            soup.find("div", id="root"), # React app часто здесь
-            soup.find("main"),
-            soup.find("div", class_=["container", "content", "main-content"]),
-        ]
-        for container in potential_containers:
-            if container:
-                updates_container = container
-                logger.debug(f"Найден потенциальный контейнер: {container.name} ({container.get('id')}, {container.get('class')})")
-                break
-        
-        if not updates_container:
-            updates_container = soup.body if soup.body else soup
-            logger.warning("Контейнер обновлений не найден по селекторам, использую body или весь soup.")
-
         # Поиск ссылок на отдельные обновления
-        # Обычно это ссылки вида /updates/some-title
-        update_links = updates_container.find_all("a", href=lambda href: href and href.startswith("/updates/") and href != "/updates/")
+        # Предполагаем, что ссылки имеют вид /updates/some-title
+        update_links = soup.find_all("a", href=lambda href: href and href.startswith("/updates/") and href != "/updates/")
         logger.debug(f"Найдено {len(update_links)} ссылок на обновления.")
         
         if not update_links:
-            # План Б: ищем любые ссылки с "updates" в href
-            update_links = updates_container.find_all("a", href=lambda href: href and "updates" in href and href not in ["/updates", "/updates/"])
-            logger.debug(f"План Б: найдено {len(update_links)} ссылок с 'updates' в href.")
-
-        if not update_links:
-            # План В: ищем заголовки, возможно, они кликабельны
-            headers = updates_container.find_all(['h1', 'h2', 'h3', 'h4'], string=lambda text: text and "обновлен" in text.lower())
-            logger.debug(f"План В: найдено {len(headers)} заголовков с 'обновлен'.")
-            # Тут логика сложнее, пропустим для простоты
+            update_links = soup.find_all("a", href=lambda href: href and "updates" in href and href not in ["/updates", "/updates/"])
+            logger.debug(f"План Б: найдено {len(update_links)} ссылок.")
 
         if not update_links:
             logger.error("Не найдены ссылки на страницы обновлений.")
-            # Отправим пользователю часть HTML для отладки (только владельцу)
-            preview_html = html_content[:2000] if len(html_content) > 2000 else html_content
+            preview_html = html_content[:1000] if len(html_content) > 1000 else html_content
             await status_message.edit_text(
-                "❌ Не удалось найти обновления на странице. "
+                "❌ Не удалось найти обновления. "
                 "Структура сайта могла измениться. "
                 "Информация отправлена администратору."
             )
             if update.effective_user.id == OWNER_ID:
                 await update.message.reply_text(
-                    f"Для отладки: первые 2000 символов HTML:\n```\n{preview_html}\n```",
+                    f"Для отладки: первые 1000 символов HTML:\n```\n{preview_html}\n```",
                     parse_mode='MarkdownV2'
                 )
             return
 
-        # Берем первую ссылку (предполагаем, что она ведет к последнему обновлению)
+        # Берем первую ссылку
         latest_update_link = update_links[0]['href']
         full_update_url = f"https://dota1x6.com{latest_update_link}" if latest_update_link.startswith('/') else latest_update_link
         logger.info(f"Найдена ссылка на последнее обновление: {full_update_url}")
@@ -285,10 +247,9 @@ async def send_last_update(update: Update):
 
         # Извлечение заголовка
         title = "Без названия"
-        # Ищем заголовок в <title>, <h1>, <h2> и т.д.
         title_tag = detail_soup.find('title')
         if title_tag:
-            title = title_tag.get_text(strip=True).replace(" - Dota 1x6", "") # Часто сайт добавляет суффикс
+            title = title_tag.get_text(strip=True).replace(" - Dota 1x6", "")
         else:
             header_tag = detail_soup.find(['h1', 'h2'])
             if header_tag:
@@ -297,14 +258,13 @@ async def send_last_update(update: Update):
         logger.info(f"Заголовок обновления: {title}")
 
         # Извлечение основного текста
-        # Ищем основной контент
         content_div = None
         potential_content_selectors = [
-            "article", # Семантический тег для статьи
+            "article",
             "div.content",
             "div.post-content",
             "div.entry-content",
-            "main", # Если весь main - это содержимое
+            "main",
         ]
         for selector in potential_content_selectors:
             content_div = detail_soup.select_one(selector)
@@ -314,12 +274,11 @@ async def send_last_update(update: Update):
         
         if not content_div:
             content_div = detail_soup.body if detail_soup.body else detail_soup
-            logger.warning("Контент не найден по селекторам, использую body или весь soup.")
+            logger.warning("Контент не найден, использую body.")
 
-        # Получаем текст, стараясь сохранить структуру
         content_text = content_div.get_text(separator='\n', strip=True) if content_div else "Нет текста."
         
-        # Ограничиваем длину текста для Telegram
+        # Ограничиваем длину текста
         max_length = 3500
         if len(content_text) > max_length:
             content_text = content_text[:max_length] + "\n...\n(Текст обрезан)"
@@ -332,13 +291,13 @@ async def send_last_update(update: Update):
         await status_message.edit_text("✅ Найдено последнее обновление! Отправляю...")
         try:
             await update.message.reply_text(message_text, parse_mode='Markdown')
-        except Exception as e: # Если Markdown не прошел
+        except Exception as e:
             logger.warning(f"Не удалось отправить с Markdown: {e}. Отправляю без форматирования.")
-            await update.message.reply_text(f"🆕 {title}\n\n{content_text}"[:4096]) # Еще одна проверка длины
+            await update.message.reply_text(f"🆕 {title}\n\n{content_text}"[:4096])
 
         # --- Поиск и отправка изображений ---
         images = content_div.find_all("img") if content_div else []
-        logger.info(f"Найдено {len(images)} изображений в контенте.")
+        logger.info(f"Найдено {len(images)} изображений.")
         
         sent_images = 0
         max_images = 5
@@ -374,7 +333,7 @@ async def send_last_update(update: Update):
                 logger.error(f"Ошибка при загрузке/отправке изображения {img_url}: {e}", exc_info=True)
 
         if sent_images == 0 and images:
-            await update.message.reply_text("Изображения найдены на странице, но не удалось их загрузить.")
+            await update.message.reply_text("Изображения найдены, но не удалось их загрузить.")
 
         # Кнопка "Все обновления"
         inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
@@ -389,9 +348,8 @@ async def send_last_update(update: Update):
     except Exception as e:
         logger.error(f"Ошибка при получении обновлений: {e}", exc_info=True)
         await status_message.edit_text("❌ Произошла ошибка при получении обновлений.")
-        # Отправляем сообщение об ошибке владельцу
         if update.effective_user.id == OWNER_ID:
-            await update.message.reply_text(f"Детали ошибки (только для админа):\n`{str(e)[:500]}`", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"Детали ошибки:\n`{str(e)[:500]}`", parse_mode='MarkdownV2')
 
 # --- Команды для администратора ---
 
@@ -409,6 +367,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Открываем в двоичном режиме для отправки документа
         with open(USER_LOG_FILE, "rb") as f:
             await update.message.reply_document(document=f, filename="user_messages.txt")
     except Exception as e:
@@ -446,35 +405,30 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Точка входа ---
 
-async def main_async():
-    """Асинхронная точка входа для инициализации и запуска бота."""
+async def main():
+    """Главная асинхронная функция."""
     logger.info("Начало инициализации бота...")
     
-    # 1. Установка браузеров Playwright
+    # Установка браузеров Playwright
     await install_playwright_browsers()
     
-    # 2. Проверка токена
     if not TOKEN:
-        logger.critical("Токен бота не установлен! Завершение работы.")
-        return # Завершаем, если нет токена
+        logger.critical("Токен бота не установлен!")
+        return
         
-    # 3. Создание и настройка Application
     app = ApplicationBuilder().token(TOKEN).build()
     
-    # 4. Регистрация обработчиков
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
     app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # 5. Запуск бота
     logger.info("✅ Бот инициализирован и готов к запуску.")
     await app.run_polling()
 
-def main():
-    """Синхронная точка входа, которая запускает асинхронную логику."""
-    logger.info("🚀 Запуск бота...")
-    asyncio.run(main_async())
-
 if __name__ == "__main__":
-    main()
+    logger.info("🚀 Запуск бота...")
+    # Используем asyncio.run() как рекомендует документация python-telegram-bot v20+
+    # Если возникает ошибка "already running", это проблема среды выполнения (например, Jupyter)
+    # В таком случае, запуск должен производиться командой `python bot.py` в терминале
+    asyncio.run(main())
