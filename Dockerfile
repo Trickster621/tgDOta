@@ -1,40 +1,35 @@
 FROM python:3.11-slim
 
-# Устанавливаем зависимости системы для Playwright
+# Установка зависимостей для Playwright
 RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
+    libx11-xcb1 \
     libxcomposite1 \
+    libxcursor1 \
     libxdamage1 \
     libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libatspi2.0-0 \
     libxfixes3 \
-    fonts-unifont \
+    libxi6 \
+    libasound2 \
+    libatk1.0-0 \
+    libcups2 \
+    libnss3 \
+    libpangocairo-1.0-0 \
+    libgtk-3-0 \
+    libgbm1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Python зависимости
+# Создаем рабочую директорию
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем Playwright и браузеры
-ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
-RUN playwright install chromium && \
-    rm -rf /root/.cache/ms-playwright
-
-# Копируем код
+# Копируем файлы
 COPY . .
 
-# Запускаем бота
+# Устанавливаем зависимости Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Устанавливаем браузеры для Playwright
+RUN playwright install --with-deps
+
+# Команда запуска
 CMD ["python", "bot.py"]
