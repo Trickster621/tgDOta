@@ -6,16 +6,13 @@ from bs4 import BeautifulSoup
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
-from playwright.async_io import async_playwright
+from playwright.async_api import async_playwright
 
 # Логирование
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
-
-# Установка playwright
-os.system('playwright install --with-deps')
 
 # Токен бота
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
@@ -116,26 +113,34 @@ async def send_last_update(update: Update):
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
             
-            table = soup.find("table") or soup.find("div", {"role": "table"})
+            table = soup.find("table") or soup.find("div", {"role": "table"}) or soup.find("div", class_="updates-list")
             if not table:
+                logging.error(f"Не найдена таблица или контейнер обновлений. HTML: {html[:500]}")
                 await update.message.reply_text("Не удалось найти таблицу обновлений.")
                 return
             
-            rows = table.find_all("tr")[1:]
+            rows = table.find_all("tr") or table.find_all("div", class_="update-row") or table.find_all("div", recursive=False)
             if not rows:
+                logging.error("Не найдены строки обновлений.")
                 await update.message.reply_text("Нет обновлений.")
                 return
             
             first_row = rows[0]
-            tds = first_row.find_all("td")
+            tds = first_row.find_all("td") or first_row.find_all("div", recursive=False)
+            if not tds:
+                logging.error("Не найдены ячейки в строке обновления.")
+                await update.message.reply_text("Не удалось извлечь данные обновления.")
+                return
+            
             title_a = tds[0].find("a")
             if not title_a:
                 text_update = tds[0].get_text(strip=True)
+                logging.info(f"Ссылка не найдена, используется текст: {text_update}")
                 await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
                 return
             
             title = title_a.get_text(strip=True)
-            link = title_a["href"]
+            link = title_a.get("href")
             full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
             
             # Загружаем детальную страницу
@@ -151,14 +156,16 @@ async def send_last_update(update: Update):
             # Скачиваем и отправляем картинки
             images = content_div.find_all("img") if content_div else []
             for img in images:
-                img_src = img["src"]
+                img_src = img.get("src")
+                if not img_src:
+                    continue
                 img_url = img_src if img_src.startswith("https://") else f"https://dota1x6.com{img_src}"
                 try:
                     img_resp = requests.get(img_url, timeout=10)
                     if img_resp.ok:
                         await update.message.reply_photo(photo=BytesIO(img_resp.content))
-                except:
-                    pass
+                except Exception as e:
+                    logging.error(f"Ошибка при загрузке изображения {img_url}: {e}")
             
             # Кнопка "Все обновления"
             inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
