@@ -3,13 +3,3 @@ requests
 beautifulsoup4
 cloudscraper
 selenium
-
-
-
-
-
-
-
-
-
-
