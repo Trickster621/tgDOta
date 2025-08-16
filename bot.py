@@ -1,4 +1,4 @@
-# bot.py — финальная интегрированная версия
+# bot.py — финальная интегрированная версия с Selenium
 import logging
 import os
 from io import BytesIO
@@ -24,6 +24,15 @@ from telegram.ext import (
     filters,
 )
 
+# Импортируем необходимые компоненты Selenium
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
@@ -31,6 +40,11 @@ USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 # URL к API для получения информации об обновлений
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
+# Путь к драйверу браузера. Замените на свой путь, если нужно.
+# Если драйвер в той же папке, что и bot.py, можно указать только его имя.
+# Пример для Windows: CHROME_DRIVER_PATH = "chromedriver.exe"
+# Пример для Linux/macOS: CHROME_DRIVER_PATH = "./chromedriver"
+CHROME_DRIVER_PATH = "chromedriver.exe"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -69,7 +83,7 @@ def get_latest_update_info_from_api():
         r = requests.get(API_UPDATES_URL, timeout=10)
         r.raise_for_status()
         
-        data = r.json().get("data") # ИСПРАВЛЕНО: сначала получаем ключ "data"
+        data = r.json().get("data")
         if not data:
             logger.warning("API returned no data key")
             return None
@@ -88,6 +102,41 @@ def get_latest_update_info_from_api():
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
         return None
+
+# ---------- Selenium Web scraping ----------
+def get_page_content_with_selenium(url):
+    """
+    Получает полный HTML-контент страницы после выполнения JavaScript.
+    """
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Запускаем браузер в фоновом режиме
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        logger.info(f"Начинаю загрузку страницы с помощью Selenium: {url}")
+        driver.get(url)
+        
+        # Ожидаем, пока заголовок страницы не появится, чтобы убедиться, что контент загружен
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "updates-content"))
+        )
+        
+        content = driver.page_source
+        
+        return content
+    
+    except Exception as e:
+        logger.error(f"Ошибка Selenium: {e}")
+        return None
+    
+    finally:
+        if 'driver' in locals():
+            driver.quit()
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -115,12 +164,15 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     
-    try:
-        # Теперь парсим полную страницу, используя URL из API
-        update_page_response = scraper.get(update_url, timeout=10)
-        update_page_response.raise_for_status()
+    # ИСПОЛЬЗУЕМ SELENIUM для получения HTML
+    page_content = get_page_content_with_selenium(update_url)
+    
+    if not page_content:
+        await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
+        return
 
-        update_soup = BeautifulSoup(update_page_response.text, "html.parser")
+    try:
+        update_soup = BeautifulSoup(page_content, "html.parser")
         
         # Находим заголовок и контент
         title = update_soup.find("h1", class_="updates-title").get_text(strip=True) if update_soup.find("h1", class_="updates-title") else "Без названия"
