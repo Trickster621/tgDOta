@@ -29,8 +29,7 @@ TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
-# Прямой URL к API для получения обновлений
-API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
+UPDATES_PAGE_URL = urljoin(BASE_URL, "/updates")
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -59,31 +58,6 @@ def log_user_message(user, text):
 # ---------- Conversation states ----------
 WAITING_FOR_DOTA_ID = 1
 
-# ---------- API ----------
-def get_latest_update():
-    """
-    Получает последнее обновление напрямую с API сайта.
-    Возвращает словарь с данными обновления или None в случае ошибки.
-    """
-    try:
-        r = scraper.get(API_UPDATES_URL, timeout=10)
-        if r.status_code != 200:
-            logger.error(f"API request failed with status code {r.status_code}")
-            return None
-        
-        data = r.json()
-        updates_list = data.get("data")
-        
-        if not updates_list or not isinstance(updates_list, list) or len(updates_list) == 0:
-            logger.warning("API returned empty updates list")
-            return None
-            
-        return updates_list[0]
-            
-    except Exception:
-        logger.exception("Error fetching or parsing latest update from API")
-        return None
-
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -97,44 +71,71 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     log_user_message(user, "Обновления")
     await update.message.reply_text("🔎 Ищу последнее обновление...")
 
-    latest_update = get_latest_update()
+    try:
+        # Шаг 1: Получаем страницу со списком обновлений
+        updates_page_response = scraper.get(UPDATES_PAGE_URL, timeout=10)
+        updates_page_response.raise_for_status() # Вызывает ошибку для плохих HTTP-кодов
 
-    if not latest_update:
-        await update.message.reply_text("Не удалось получить информацию об обновлениях. Попробуйте позже.")
-        return
+        updates_soup = BeautifulSoup(updates_page_response.text, "html.parser")
+        
+        # Шаг 2: Находим ссылку на последнее обновление
+        # Поиск первой ссылки на обновление. Она имеет класс "updates-item-link"
+        latest_update_link = updates_soup.find("a", class_="updates-item-link")
+        
+        if not latest_update_link:
+            await update.message.reply_text("Не удалось найти ссылки на обновления на сайте. Попробуйте позже.")
+            return
+            
+        latest_update_url = urljoin(BASE_URL, latest_update_link.get("href"))
 
-    title = latest_update.get("title", "Без названия")
-    html_content = latest_update.get("content", "")
-    slug = latest_update.get("slug")
-    update_url = urljoin(BASE_URL, f"/updates/{slug}") if slug else f"{BASE_URL}/updates"
+        # Шаг 3: Переходим по ссылке и парсим страницу обновления
+        update_page_response = scraper.get(latest_update_url, timeout=10)
+        update_page_response.raise_for_status()
 
-    soup = BeautifulSoup(html_content, "html.parser")
-    text = soup.get_text(separator="\n", strip=True)
-    images = [urljoin(BASE_URL, img.get("src")) for img in soup.find_all("img") if img.get("src")]
-    
-    # Отправляем текст
-    text_to_send = f"*{title}*\n\n{text}"
-    if len(text_to_send) > 4096:
-        text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
-    
-    await update.message.reply_text(text_to_send, parse_mode='Markdown')
+        update_soup = BeautifulSoup(update_page_response.text, "html.parser")
+        
+        # Находим заголовок и контент
+        title = update_soup.find("h1", class_="updates-title").get_text(strip=True) if update_soup.find("h1", class_="updates-title") else "Без названия"
+        content_div = update_soup.find("div", class_="updates-content")
+        
+        if not content_div:
+            await update.message.reply_text("Не удалось найти контент обновления. Попробуйте позже.")
+            return
 
-    # Отправляем картинки
-    for img_url in images[:10]: # Ограничение в 10 картинок
-        try:
-            await update.message.reply_photo(photo=img_url)
-        except Exception:
+        text = content_div.get_text(separator="\n", strip=True)
+        images = [urljoin(BASE_URL, img.get("src")) for img in content_div.find_all("img") if img.get("src")]
+
+        # Отправляем текст
+        text_to_send = f"*{title}*\n\n{text}"
+        if len(text_to_send) > 4096:
+            text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
+        
+        await update.message.reply_text(text_to_send, parse_mode='Markdown')
+
+        # Отправляем картинки
+        for img_url in images[:10]:
             try:
-                r = scraper.get(img_url, timeout=10)
-                if r.status_code == 200 and r.content:
-                    bio = BytesIO(r.content)
-                    await update.message.reply_photo(photo=bio)
-            except Exception as e:
-                logger.warning(f"Failed to send image {img_url}: {e}")
+                await update.message.reply_photo(photo=img_url)
+            except Exception:
+                try:
+                    r = scraper.get(img_url, timeout=10)
+                    if r.status_code == 200 and r.content:
+                        bio = BytesIO(r.content)
+                        await update.message.reply_photo(photo=bio)
+                except Exception as e:
+                    logger.warning(f"Failed to send image {img_url}: {e}")
 
-    # Кнопка "Читать на сайте"
-    kb = [[InlineKeyboardButton("Читать на сайте", url=update_url)]]
-    await update.message.reply_text("Источник:", reply_markup=InlineKeyboardMarkup(kb))
+        # Кнопка "Читать на сайте"
+        kb = [[InlineKeyboardButton("Читать на сайте", url=latest_update_url)]]
+        await update.message.reply_text("Источник:", reply_markup=InlineKeyboardMarkup(kb))
+
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP Error: {e.response.status_code} on {e.request.url}")
+        await update.message.reply_text("Не удалось получить информацию об обновлениях. Возможно, сайт недоступен.")
+    except Exception as e:
+        logger.exception("Error scraping latest update from website")
+        await update.message.reply_text("Произошла ошибка при получении данных. Попробуйте позже.")
+
 
 async def check_stats_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
