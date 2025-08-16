@@ -162,11 +162,12 @@ def main():
 
     logging.info("Бот запущен...")
     try:
-        app.run_polling(allowed_updates=Update.ALL_TYPES)
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True  # Сбрасываем старые обновления, чтобы не дублировались
+        )
     except Exception as e:
         logging.error(f"Ошибка при запуске бота: {e}")
-    finally:
-        input("Нажмите Enter для выхода...")
 
 if __name__ == "__main__":
     main()
