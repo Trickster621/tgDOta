@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from datetime import datetime
 
 import requests
-import cloudscraper # Оставляем для проверки, но не используем в запросе к API обновлений
+import cloudscraper
 from bs4 import BeautifulSoup
 from telegram import (
     Update,
@@ -66,11 +66,14 @@ def get_latest_update_info_from_api():
     Возвращает словарь с данными или None в случае ошибки.
     """
     try:
-        # Изменено: теперь используется requests, а не cloudscraper
         r = requests.get(API_UPDATES_URL, timeout=10)
         r.raise_for_status()
         
-        data = r.json()
+        data = r.json().get("data") # ИСПРАВЛЕНО: сначала получаем ключ "data"
+        if not data:
+            logger.warning("API returned no data key")
+            return None
+
         updates_list = data.get("values")
         
         if not updates_list or not isinstance(updates_list, list) or len(updates_list) == 0:
