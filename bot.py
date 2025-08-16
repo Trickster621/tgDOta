@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 from io import BytesIO
 from bs4 import BeautifulSoup
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
 
@@ -13,20 +13,24 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Токен
-TOKEN = os.environ.get("BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("Не найден токен бота! Установите переменную окружения BOT_TOKEN.")
-
-# Путь к лог-файлу
-USER_LOG_FILE = "/app/user_messages.txt"
+# Токен бота
+TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
 
 # Telegram ID владельца
 OWNER_ID = 741409144
 
-# Создаём файл заранее
+# Путь к лог-файлу
+USER_LOG_FILE = "user_messages.txt"
+
+# Создаём файл заранее, если его нет
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
+
+# Очистка старых апдейтов
+try:
+    requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset=-1")
+except:
+    pass
 
 def log_user_message(user, text):
     with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
@@ -40,61 +44,121 @@ def log_user_message(user, text):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/start")
-
-    reply_keyboard = [["Проверить статистику", "Обновления"]]
+    reply_keyboard = [["Проверить статистику", "Обновления", "Сборки"]]
     await update.message.reply_text(
-        "Привет! Выберите действие:",
+        text="Привет! Выберите действие:",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
-# Обновления
-async def updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    log_user_message(user, "Обновления")
-
+# Парсинг последнего обновления с сайта
+def get_latest_update():
     url = "https://dota1x6.com/updates"
     try:
-        response = requests.get(url)
-        if response.status_code != 200:
-            await update.message.reply_text("Не удалось получить данные с сайта.")
-            return
+        r = requests.get(url)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        # Ищем блок последнего обновления
+        latest = soup.find("div", class_="update-item")  # пример класса, может быть другой
+        if not latest:
+            return None, None
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        # Берём последний блок обновления
-        last_update = soup.select_one(".update-item")  # корректировать под реальный селектор сайта
-        if not last_update:
-            await update.message.reply_text("Не удалось найти последнее обновление.")
-            return
+        # Текст обновления
+        text = latest.get_text(separator="\n", strip=True)
 
-        # Преобразуем текст
-        text = last_update.get_text(separator="\n").strip()
-
-        # Inline-кнопка для всех обновлений
-        inline_keyboard = [
-            [InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]
-        ]
-        await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard)
-        )
+        # Ссылки на изображения
+        imgs = []
+        for img in latest.find_all("img"):
+            src = img.get("src")
+            if src:
+                imgs.append(src)
+        return text, imgs
     except Exception as e:
-        logging.error(f"Ошибка при получении обновлений: {e}")
-        await update.message.reply_text("Произошла ошибка при получении обновлений.")
+        logging.error(f"Ошибка при парсинге обновлений: {e}")
+        return None, None
 
 # Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
     user = update.message.from_user
+    text = update.message.text.strip()
     log_user_message(user, text)
 
     if text == "Проверить статистику":
         await update.message.reply_text("Введите числовой Dota ID:")
         return
-    elif text == "Обновления":
-        await updates(update, context)
+
+    if text == "Обновления":
+        latest_text, latest_imgs = get_latest_update()
+        if not latest_text:
+            await update.message.reply_text("Не удалось получить последнее обновление.")
+            return
+        # Отправка текста
+        await update.message.reply_text(latest_text)
+        # Отправка изображений
+        for img_url in latest_imgs:
+            try:
+                img_data = requests.get(img_url).content
+                bio = BytesIO(img_data)
+                bio.name = os.path.basename(img_url)
+                await update.message.reply_photo(photo=bio)
+            except:
+                continue
+        # Inline кнопка на все обновления
+        inline_keyboard = [
+            [InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]
+        ]
+        await update.message.reply_text(
+            "Смотреть все обновления:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard)
+        )
         return
-    else:
-        await update.message.reply_text("Неизвестная команда. Используйте кнопки ниже.")
+
+    if text == "Сборки":
+        await update.message.reply_text("Введите имя героя для сборки:")
+        return
+
+    # Проверка Dota ID
+    if not text.isdigit():
+        await update.message.reply_text("Пожалуйста, введите только числовой Dota ID.")
+        return
+
+    dota_id = text
+    url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            await update.message.reply_text("Не удалось получить данные с API.")
+            return
+
+        data = response.json().get("data")
+        if not data:
+            await update.message.reply_text("Игрок с таким ID не найден.")
+            return
+
+        match_count = data.get("matchCount", "неизвестно")
+        avg_place = round(data.get("avgPlace", 0), 2)
+        first_places = data.get("firstPlaces", "неизвестно")
+        rating = data.get("rating", "неизвестно")
+
+        msg = (
+            f"Всего игр: {match_count}\n"
+            f"Среднее место: {avg_place}\n"
+            f"Первых мест: {first_places}\n"
+            f"Рейтинг: {rating}"
+        )
+        await update.message.reply_text(msg)
+
+        player_url = f"https://dota1x6.com/players/{dota_id}"
+        inline_keyboard = [
+            [InlineKeyboardButton("Посмотреть историю игр", web_app=WebAppInfo(url=player_url))]
+        ]
+        await update.message.reply_text(
+            "Вы можете посмотреть историю игр:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard)
+        )
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке ID {text}: {e}")
+        await update.message.reply_text("Произошла ошибка при получении данных.")
 
 # /getlog
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +170,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not os.path.exists(USER_LOG_FILE):
-        await update.message.reply_text("Файл логов пуст.")
+        await update.message.reply_text("Файл логов пока пуст.")
         return
 
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
@@ -128,9 +192,10 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
         lines = f.readlines()
     last_lines = "".join(lines[-50:]) if lines else "(пусто)"
+    if len(last_lines) > 3500:
+        last_lines = last_lines[-3500:]
     await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
 
-# main
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
