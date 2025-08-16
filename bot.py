@@ -32,6 +32,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
@@ -40,11 +41,6 @@ USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 # URL к API для получения информации об обновлений
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
-# Путь к драйверу браузера. Замените на свой путь, если нужно.
-# Если драйвер в той же папке, что и bot.py, можно указать только его имя.
-# Пример для Windows: CHROME_DRIVER_PATH = "chromedriver.exe"
-# Пример для Linux/macOS: CHROME_DRIVER_PATH = "./chromedriver"
-CHROME_DRIVER_PATH = "chromedriver.exe"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -108,13 +104,14 @@ def get_page_content_with_selenium(url):
     """
     Получает полный HTML-контент страницы после выполнения JavaScript.
     """
+    driver = None
     try:
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # Запускаем браузер в фоновом режиме
-        chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         
+        logger.info("Устанавливаю драйвер браузера с помощью webdriver-manager...")
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
@@ -122,20 +119,27 @@ def get_page_content_with_selenium(url):
         driver.get(url)
         
         # Ожидаем, пока заголовок страницы не появится, чтобы убедиться, что контент загружен
-        WebDriverWait(driver, 10).until(
+        WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CLASS_NAME, "updates-content"))
         )
         
         content = driver.page_source
-        
+        logger.info("Страница успешно загружена, возвращаю контент.")
         return content
     
+    except TimeoutException:
+        logger.error("Таймаут ожидания загрузки контента.")
+        return None
+    except WebDriverException as e:
+        logger.error(f"Ошибка WebDriver: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Ошибка Selenium: {e}")
+        logger.error(f"Неизвестная ошибка Selenium: {e}")
         return None
     
     finally:
-        if 'driver' in locals():
+        if driver:
+            logger.info("Закрываю драйвер.")
             driver.quit()
 
 # ---------- Handlers ----------
