@@ -13,20 +13,21 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+# Токен бота
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
-OWNER_ID = 741409144
-USER_LOG_FILE = "user_messages.txt"
 
+# Telegram ID владельца
+OWNER_ID = 741409144
+
+# Путь к лог-файлу
+USER_LOG_FILE = "user_messages.txt"
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
     with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(
-            f"{datetime.now()} | ID: {user.id} | "
-            f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
-            f"Username: @{user.username} | Сообщение: {text}\n"
-        )
+        f.write(f"{datetime.now()} | ID: {user.id} | Имя: {user.first_name} | "
+                f"Фамилия: {user.last_name} | Username: @{user.username} | Сообщение: {text}\n")
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -34,7 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(user, "/start")
     reply_keyboard = [["Проверить статистику", "Обновления"]]
     await update.message.reply_text(
-        text="Привет! Выберите действие:",
+        "Привет! Выберите действие:",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
@@ -74,12 +75,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         first_places = data.get("firstPlaces", "неизвестно")
         rating = data.get("rating", "неизвестно")
 
-        msg = (
-            f"Всего игр: {match_count}\n"
-            f"Среднее место: {avg_place}\n"
-            f"Первых мест: {first_places}\n"
-            f"Рейтинг: {rating}"
-        )
+        msg = (f"Всего игр: {match_count}\n"
+               f"Среднее место: {avg_place}\n"
+               f"Первых мест: {first_places}\n"
+               f"Рейтинг: {rating}")
         await update.message.reply_text(msg)
 
         # Mini App кнопка
@@ -96,38 +95,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
-# Получение последнего обновления
+# Последнее обновление
 async def send_last_update(update: Update):
     try:
         url = "https://dota1x6.com/updates"
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            await update.message.reply_text("Не удалось получить обновления с сайта.")
+        response = requests.get(url)
+        if response.status_code != 200:
+            await update.message.reply_text("Не удалось получить последние обновления.")
             return
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # Находим первый блок обновления
-        first_update = soup.find("td", class_="py-[14px]") or soup.find("div", class_="update-row")
+        soup = BeautifulSoup(response.text, "html.parser")
+        # Берем первую строчку обновления
+        first_update = soup.find("td") or soup.find("div", class_="update-row")
         if not first_update:
             await update.message.reply_text("Не удалось найти последнее обновление.")
             return
 
-        # Текст обновления
-        title = first_update.get_text(strip=True)
-        await update.message.reply_text(f"Последнее обновление:\n\n{title}")
-
-        # Кнопка "Все обновления"
-        inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
-        await update.message.reply_text(
-            "Полный список обновлений:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard)
-        )
+        text_update = first_update.get_text(strip=True)
+        await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
 
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
 
-# /getlog — присылает весь лог
+# Логи владельцу
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -137,7 +128,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not os.path.exists(USER_LOG_FILE):
-        await update.message.reply_text("Файл логов пока пуст.")
+        await update.message.reply_text("Файл логов пуст.")
         return
 
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
@@ -147,7 +138,6 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio.seek(0)
     await update.message.reply_document(document=bio, filename="user_messages.txt")
 
-# /previewlog — последние 50 сообщений
 async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/previewlog")
