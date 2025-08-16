@@ -29,7 +29,7 @@ TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
-# Прямой URL к API для получения обновлений
+# URL к API для получения информации об обновлениях
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 
 # ---------- ЛОГИ ----------
@@ -63,6 +63,7 @@ WAITING_FOR_DOTA_ID = 1
 def get_latest_update_info_from_api():
     """
     Получает информацию о последнем обновлении с API.
+    Теперь ищет ключ 'values'.
     Возвращает словарь с данными или None в случае ошибки.
     """
     try:
@@ -70,7 +71,8 @@ def get_latest_update_info_from_api():
         r.raise_for_status()
         
         data = r.json()
-        updates_list = data.get("data")
+        # Изменено: теперь ищет "values" вместо "data"
+        updates_list = data.get("values")
         
         if not updates_list or not isinstance(updates_list, list) or len(updates_list) == 0:
             logger.warning("API returned empty updates list")
@@ -84,7 +86,6 @@ def get_latest_update_info_from_api():
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
         return None
-
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,7 +176,7 @@ async def check_stats_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not text.isdigit():
         await update.message.reply_text("Пожалуйста, введите только числовой Dota ID. Для отмены введите /cancel")
-        return WAITING_FOR_DOTA_ID
+        return ConversationHandler.END
 
     dota_id = text
     url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
