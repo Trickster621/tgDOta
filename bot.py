@@ -113,7 +113,7 @@ def get_page_content_with_selenium(url):
         chrome_options.add_argument("--window-size=1920,1080")
         
         # Указываем путь к Chrome, установленному через Dockerfile
-        service = Service("/usr/bin/google-chrome")
+        service = Service("/usr/bin/google-chrome", service_args=["--verbose"])
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
         logger.info(f"Начинаю загрузку страницы с помощью Selenium: {url}")
@@ -326,3 +326,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
