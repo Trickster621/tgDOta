@@ -4,3 +4,4 @@ beautifulsoup4
 cloudscraper
 selenium
 requests-html
+lxml[html_clean]
