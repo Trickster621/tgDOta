@@ -14,25 +14,17 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Токен бота
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
-
-# Telegram ID владельца
 OWNER_ID = 741409144
-
-# Путь к лог-файлу
 USER_LOG_FILE = "user_messages.txt"
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
-    """Сохраняем данные пользователя и сообщение в файл"""
     with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(
-            f"{datetime.now()} | ID: {user.id} | "
-            f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
-            f"Username: @{user.username} | Сообщение: {text}\n"
-        )
+        f.write(f"{datetime.now()} | ID: {user.id} | "
+                f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
+                f"Username: @{user.username} | Сообщение: {text}\n")
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,6 +94,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
+# Получение последнего обновления
 async def send_last_update(update: Update):
     try:
         url = "https://dota1x6.com/updates"
@@ -109,63 +102,24 @@ async def send_last_update(update: Update):
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             await page.goto(url)
-            await page.wait_for_timeout(5000)  # Ждем загрузки JS
+            await page.wait_for_timeout(5000)
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
             
-            table = soup.find("table") or soup.find("div", {"role": "table"}) or soup.find("div", class_="updates-list")
+            table = soup.find("div", class_="updates-list")
             if not table:
-                logging.error(f"Не найдена таблица или контейнер обновлений. HTML: {html[:500]}")
-                await update.message.reply_text("Не удалось найти таблицу обновлений.")
+                logging.error("Не найден блок обновлений.")
+                await update.message.reply_text("Не удалось получить последнее обновление.")
                 return
             
-            rows = table.find_all("tr") or table.find_all("div", class_="update-row") or table.find_all("div", recursive=False)
-            if not rows:
-                logging.error("Не найдены строки обновлений.")
-                await update.message.reply_text("Нет обновлений.")
+            first_row = table.find("td") or table.find("div", recursive=False)
+            if not first_row:
+                logging.error("Не найдена первая запись обновления.")
+                await update.message.reply_text("Не удалось получить последнее обновление.")
                 return
             
-            first_row = rows[0]
-            tds = first_row.find_all("td") or first_row.find_all("div", recursive=False)
-            if not tds:
-                logging.error("Не найдены ячейки в строке обновления.")
-                await update.message.reply_text("Не удалось извлечь данные обновления.")
-                return
-            
-            title_a = tds[0].find("a")
-            if not title_a:
-                text_update = tds[0].get_text(strip=True)
-                logging.info(f"Ссылка не найдена, используется текст: {text_update}")
-                await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
-                return
-            
-            title = title_a.get_text(strip=True)
-            link = title_a.get("href")
-            full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
-            
-            # Загружаем детальную страницу
-            await page.goto(full_link)
-            await page.wait_for_timeout(5000)
-            html_detail = await page.content()
-            soup_detail = BeautifulSoup(html_detail, "html.parser")
-            content_div = soup_detail.find("div", class_="update-content") or soup_detail.find("article") or soup_detail.body
-            content_text = content_div.get_text(strip=True, separator="\n") if content_div else "Нет содержимого."
-            
-            await update.message.reply_text(f"Последнее обновление: {title}\n\n{content_text}")
-            
-            # Скачиваем и отправляем картинки
-            images = content_div.find_all("img") if content_div else []
-            for img in images:
-                img_src = img.get("src")
-                if not img_src:
-                    continue
-                img_url = img_src if img_src.startswith("https://") else f"https://dota1x6.com{img_src}"
-                try:
-                    img_resp = requests.get(img_url, timeout=10)
-                    if img_resp.ok:
-                        await update.message.reply_photo(photo=BytesIO(img_resp.content))
-                except Exception as e:
-                    logging.error(f"Ошибка при загрузке изображения {img_url}: {e}")
+            text_update = first_row.get_text(strip=True, separator="\n")
+            await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
             
             # Кнопка "Все обновления"
             inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
@@ -177,7 +131,7 @@ async def send_last_update(update: Update):
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
 
-# /getlog — присылает весь лог
+# Логи
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -197,7 +151,6 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio.seek(0)
     await update.message.reply_document(document=bio, filename="user_messages.txt")
 
-# /previewlog — последние 50 сообщений
 async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/previewlog")
@@ -213,13 +166,13 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_lines = last_lines[-3500:]
     await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
 
+# Основной запуск
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
     app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     logging.info("Бот запущен...")
     app.run_polling()
 
