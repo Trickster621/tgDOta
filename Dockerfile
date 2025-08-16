@@ -1,10 +1,10 @@
 # Используем базовый образ Python
 FROM python:3.10-slim
 
-# Устанавливаем системные зависимости, включая утилиты для скачивания (wget)
-# и управления ключами (gnupg), а также другие зависимости Chrome
+# Устанавливаем системные зависимости, включая curl и gnupg,
+# необходимые для установки Google Chrome
 RUN apt-get update && apt-get install -y \
-    wget \
+    curl \
     gnupg \
     libxcomposite1 \
     libxcursor1 \
@@ -16,12 +16,16 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
-    lsb-release \
-    # Добавляем Chrome
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable
+    lsb-release
+
+# Добавляем ключ репозитория Google Chrome с помощью curl (современный метод)
+RUN curl -sS https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+
+# Добавляем репозиторий Google Chrome
+RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+
+# Устанавливаем Google Chrome
+RUN apt-get update && apt-get install -y google-chrome-stable
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
