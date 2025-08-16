@@ -106,17 +106,17 @@ def get_page_content_with_selenium(url):
     driver = None
     try:
         chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
-        # Указываем путь к Chrome, установленному через Dockerfile
-        service = Service("/usr/bin/google-chrome", service_args=["--verbose"])
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Добавляем путь к драйверу, который Dockerfile устанавливает в систему
+        chrome_options.binary_location = "/usr/bin/google-chrome"
         
         logger.info(f"Начинаю загрузку страницы с помощью Selenium: {url}")
+        driver = webdriver.Chrome(options=chrome_options)
         driver.get(url)
         
         WebDriverWait(driver, 20).until(
@@ -326,4 +326,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
