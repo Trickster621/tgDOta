@@ -1,5 +1,6 @@
 import logging
 import requests
+import cloudscraper
 from datetime import datetime
 from io import BytesIO
 from bs4 import BeautifulSoup
@@ -103,50 +104,72 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_last_update(update: Update):
     try:
-        url = "https://steamcommunity.com/sharedfiles/filedetails/changelog/2876660936"
-        r = requests.get(url, timeout=10)
+        url = "https://dota1x6.com/updates"
+        scraper = cloudscraper.create_scraper()
+        r = scraper.get(url, timeout=10)
         if r.status_code != 200:
-            await update.message.reply_text("Не удалось получить обновления с сайта Steam.")
+            await update.message.reply_text("Не удалось получить обновления с сайта.")
             return
 
         soup = BeautifulSoup(r.text, "html.parser")
-        update_section = soup.find("div", class_="changelog")
-        if not update_section:
-            logging.error(f"Не найдена секция обновлений. HTML: {r.text[:500]}")
-            await update.message.reply_text("Не удалось найти обновления.")
+        table = soup.find("table") or soup.find("div", {"role": "table"}) or soup.find("div", class_="updates-list")
+        if not table:
+            logging.error(f"Не найдена таблица или контейнер обновлений. HTML: {r.text[:500]}")
+            await update.message.reply_text("Не удалось найти таблицу обновлений.")
             return
 
-        # Ищем первый блок обновления
-        update_block = update_section.find("div", class_="workshopItemChangelogEntry")
-        if not update_block:
-            logging.error("Не найдены записи обновлений.")
+        rows = table.find_all("tr") or table.find_all("div", class_="update-row") or table.find_all("div", recursive=False)
+        if not rows:
+            logging.error("Не найдены строки обновлений.")
+            await update.message.reply_text("Нет обновлений.")
+            return
+
+        first_row = rows[0]
+        tds = first_row.find_all("td") or first_row.find_all("div", recursive=False)
+        if not tds:
+            logging.error("Не найдены ячейки в строке обновления.")
             await update.message.reply_text("Не удалось извлечь данные обновления.")
             return
 
-        # Извлекаем заголовок и дату
-        title = update_block.find("h2") or update_block.find("div", class_="date")
-        title_text = title.get_text(strip=True) if title else "Без заголовка"
-        content = update_block.find("div", class_="content") or update_block
-        content_text = content.get_text(strip=True, separator="\n") if content else "Нет содержимого."
+        title_a = tds[0].find("a")
+        if not title_a:
+            text_update = tds[0].get_text(strip=True)
+            logging.info(f"Ссылка не найдена, используется текст: {text_update}")
+            await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
+            return
 
-        await update.message.reply_text(f"Последнее обновление: {title_text}\n\n{content_text}")
+        title = title_a.get_text(strip=True)
+        link = title_a.get("href")
+        full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
+
+        # Загружаем страницу обновления
+        r_detail = scraper.get(full_link, timeout=10)
+        if r_detail.status_code != 200:
+            await update.message.reply_text("Не удалось загрузить страницу обновления.")
+            return
+
+        soup_detail = BeautifulSoup(r_detail.text, "html.parser")
+        content_div = soup_detail.find("div", class_="update-content") or soup_detail.find("article") or soup_detail.body
+        content_text = content_div.get_text(strip=True, separator="\n") if content_div else "Нет содержимого."
+
+        await update.message.reply_text(f"Последнее обновление: {title}\n\n{content_text}")
 
         # Скачиваем и отправляем картинки
-        images = content.find_all("img") if content else []
+        images = content_div.find_all("img") if content_div else []
         for img in images:
             img_src = img.get("src")
             if not img_src:
                 continue
-            img_url = img_src if img_src.startswith("https://") else f"https://steamcommunity.com{img_src}"
+            img_url = img_src if img_src.startswith("https://") else f"https://dota1x6.com{img_src}"
             try:
-                img_resp = requests.get(img_url, timeout=10)
+                img_resp = scraper.get(img_url, timeout=10)
                 if img_resp.ok:
                     await update.message.reply_photo(photo=BytesIO(img_resp.content))
             except Exception as e:
                 logging.error(f"Ошибка при загрузке изображения {img_url}: {e}")
 
         # Кнопка "Все обновления"
-        inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://steamcommunity.com/sharedfiles/filedetails/changelog/2876660936")]]
+        inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
         await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
 
     except Exception as e:
