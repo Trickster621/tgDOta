@@ -12,8 +12,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Токен бота
-TOKEN = "8486854020:AAFsauLPBLKNe2_IP5brpeytH4TUAF8AB6A"
+# Токен берётся из переменной окружения
+TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("Не найден токен бота! Установите переменную окружения BOT_TOKEN.")
 
 # Путь к лог-файлу на Railway
 USER_LOG_FILE = "/app/user_messages.txt"
@@ -144,7 +146,6 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
             lines = f.readlines()
         last_lines = "".join(lines[-50:]) if lines else "(пусто)"
-        # Ограничение длины сообщения
         if len(last_lines) > 3500:
             last_lines = last_lines[-3500:]
         await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
