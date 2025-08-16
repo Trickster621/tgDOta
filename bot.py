@@ -28,7 +28,6 @@ TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144
 USER_LOG_FILE = "user_messages.txt"
 
-UPDATE_PAGE = "https://dota1x6.com/updates/?page=1&count=20"
 BASE_URL = "https://dota1x6.com"
 
 # ---------- ЛОГИ ----------
@@ -57,31 +56,33 @@ WAITING_FOR_DOTA_ID = 1
 
 # ---------- API / парсинг апдейтов ----------
 def fetch_updates_list_first_item():
-    """Возвращает первый элемент списка обновлений (dict) или None."""
+    """Парсит HTML /updates и возвращает dict с {title, url} для самого свежего обновления."""
     try:
-        r = requests.get(UPDATE_PAGE, timeout=10)
+        r = requests.get(f"{BASE_URL}/updates", timeout=10)
         if r.status_code != 200:
-            logger.warning("Updates list returned status %s", r.status_code)
+            logger.warning("Updates page returned %s", r.status_code)
             return None
-        j = r.json()  # может вызывать ValueError
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        tbody = soup.find("tbody")
+        if not tbody:
+            return None
+
+        first_row = tbody.find("tr")
+        if not first_row:
+            return None
+
+        link_tag = first_row.find("a", href=True)
+        if not link_tag:
+            return None
+
+        title = link_tag.get_text(strip=True)
+        link = urljoin(BASE_URL, link_tag["href"])
+
+        return {"title": title, "url": link}
     except Exception as e:
-        logger.warning("Cannot fetch updates list: %s", e)
+        logger.warning("Cannot parse updates list: %s", e)
         return None
-
-    items = None
-    if isinstance(j, dict):
-        for key in ("data", "items", "result", "updates"):
-            if key in j and isinstance(j[key], (list, tuple)):
-                items = j[key]
-                break
-    elif isinstance(j, list):
-        items = j
-
-    if not items:
-        return None
-    if len(items) == 0:
-        return None
-    return items[0]
 
 def fetch_update_detail(link_or_slug):
     """Возвращает dict: {title, text, images:list, url} или None."""
@@ -124,7 +125,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
-# Обработчик: кнопка "Обновления" — берём последний апдейт и шлём текст + картинки
+# Обработчик: кнопка "Обновления"
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Обновления")
@@ -133,21 +134,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Не удалось получить список обновлений.")
         return
 
-    # возможные поля ссылки/слага
-    link = item.get("url") or item.get("link") or item.get("slug") or item.get("path") or item.get("href")
-    title_in_list = item.get("title") or item.get("name") or item.get("header") or ""
-    detail = fetch_update_detail(link)
-
+    detail = fetch_update_detail(item["url"])
     if not detail:
-        # fallback — попытаться взять текст прямо из item
-        summary = item.get("summary") or item.get("excerpt") or item.get("content") or ""
-        title = title_in_list or "Последнее обновление"
-        body = summary or "(нет содержимого)"
-        await update.message.reply_text(f"{title}\n\n{body}")
-        await update.message.reply_text("Все обновления: https://dota1x6.com/updates")
+        await update.message.reply_text(f"{item['title']}\n\n(не удалось загрузить содержимое)")
         return
 
-    # отправляем текст (без markdown, plain text)
+    # отправляем текст
     text_to_send = f"{detail['title']}\n\n{detail['text']}"
     if len(text_to_send) > 3900:
         text_to_send = text_to_send[:3900] + "\n\n(текст обрезан)"
@@ -156,10 +148,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     # отправляем картинки
     for img_url in detail["images"]:
         try:
-            # попытаемся отправить URL напрямую
             await update.message.reply_photo(photo=img_url)
         except Exception:
-            # если не получится — скачиваем и отправляем как BytesIO
             try:
                 r = requests.get(img_url, timeout=10)
                 if r.status_code == 200 and r.content:
@@ -171,7 +161,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 logger.warning("Failed to send image %s", img_url)
                 continue
 
-    # кнопка "Все обновления"
     kb = [[InlineKeyboardButton("Все обновления", url=f"{BASE_URL}/updates")]]
     await update.message.reply_text("Смотреть все обновления:", reply_markup=InlineKeyboardMarkup(kb))
 
@@ -217,7 +206,6 @@ async def check_stats_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msg)
 
-        # mini app кнопка
         player_url = f"https://dota1x6.com/players/{dota_id}"
         inline = [[InlineKeyboardButton("Посмотреть историю игр", web_app=WebAppInfo(url=player_url))]]
         await update.message.reply_text("Вы можете посмотреть историю игр:", reply_markup=InlineKeyboardMarkup(inline))
@@ -272,7 +260,6 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # ConversationHandler для проверки статистики
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^Проверить статистику$"), check_stats_start)],
         states={WAITING_FOR_DOTA_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, check_stats_id)]},
@@ -280,10 +267,8 @@ def main():
         allow_reentry=True,
     )
 
-    # handler: кнопка Обновления (текстовая кнопка)
     updates_handler = MessageHandler(filters.Regex("^Обновления$"), handle_updates_button)
 
-    # start and logs
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
     app.add_handler(CommandHandler("previewlog", previewlog))
@@ -291,7 +276,6 @@ def main():
     app.add_handler(conv)
     app.add_handler(updates_handler)
 
-    # любой другой текст (кроме команд) — подсказка
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: u.message.reply_text("Используйте кнопки внизу.")))
 
     logger.info("Bot started")
