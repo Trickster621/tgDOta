@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
-from playwright.async_api import async_playwright
 
 # Логирование
 logging.basicConfig(
@@ -17,14 +16,17 @@ logging.basicConfig(
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_НОВЫЙ_ТОКЕН"
 OWNER_ID = 741409144
 USER_LOG_FILE = "user_messages.txt"
+
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
     with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()} | ID: {user.id} | "
-                f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
-                f"Username: @{user.username} | Сообщение: {text}\n")
+        f.write(
+            f"{datetime.now()} | ID: {user.id} | "
+            f"Имя: {user.first_name} | Фамилия: {user.last_name} | "
+            f"Username: @{user.username} | Сообщение: {text}\n"
+        )
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -98,40 +100,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_last_update(update: Update):
     try:
         url = "https://dota1x6.com/updates"
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(url)
-            await page.wait_for_timeout(5000)
-            html = await page.content()
-            soup = BeautifulSoup(html, "html.parser")
-            
-            table = soup.find("div", class_="updates-list")
-            if not table:
-                logging.error("Не найден блок обновлений.")
-                await update.message.reply_text("Не удалось получить последнее обновление.")
-                return
-            
-            first_row = table.find("td") or table.find("div", recursive=False)
-            if not first_row:
-                logging.error("Не найдена первая запись обновления.")
-                await update.message.reply_text("Не удалось получить последнее обновление.")
-                return
-            
-            text_update = first_row.get_text(strip=True, separator="\n")
-            await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
-            
-            # Кнопка "Все обновления"
-            inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
-            await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
-            
-            await browser.close()
-    
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            await update.message.reply_text("Не удалось получить обновления с сайта.")
+            return
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # Находим первый блок обновления
+        first_update = soup.find("td", class_="py-[14px]") or soup.find("div", class_="update-row")
+        if not first_update:
+            await update.message.reply_text("Не удалось найти последнее обновление.")
+            return
+
+        # Текст обновления
+        title = first_update.get_text(strip=True)
+        await update.message.reply_text(f"Последнее обновление:\n\n{title}")
+
+        # Кнопка "Все обновления"
+        inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
+        await update.message.reply_text(
+            "Полный список обновлений:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard)
+        )
+
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
 
-# Логи
+# /getlog — присылает весь лог
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -151,6 +147,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio.seek(0)
     await update.message.reply_document(document=bio, filename="user_messages.txt")
 
+# /previewlog — последние 50 сообщений
 async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/previewlog")
@@ -166,13 +163,13 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_lines = last_lines[-3500:]
     await update.message.reply_text(f"Последние строки лога:\n\n{last_lines}")
 
-# Основной запуск
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("getlog", getlog))
     app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     logging.info("Бот запущен...")
     app.run_polling()
 
