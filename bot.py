@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from datetime import datetime
 
 import requests
-import cloudscraper
+import cloudscraper # Оставляем для проверки, но не используем в запросе к API обновлений
 from bs4 import BeautifulSoup
 from telegram import (
     Update,
@@ -29,7 +29,7 @@ TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
-# URL к API для получения информации об обновлениях
+# URL к API для получения информации об обновлений
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 
 # ---------- ЛОГИ ----------
@@ -66,7 +66,8 @@ def get_latest_update_info_from_api():
     Возвращает словарь с данными или None в случае ошибки.
     """
     try:
-        r = scraper.get(API_UPDATES_URL, timeout=10)
+        # Изменено: теперь используется requests, а не cloudscraper
+        r = requests.get(API_UPDATES_URL, timeout=10)
         r.raise_for_status()
         
         data = r.json()
