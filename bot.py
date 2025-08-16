@@ -14,8 +14,8 @@ logging.basicConfig(
 # Токен бота
 TOKEN = "8486854020:AAFsauLPBLKNe2_IP5brpeytH4TUAF8AB6A"
 
-# Путь к лог-файлу
-USER_LOG_FILE = os.path.join(os.getcwd(), "user_messages.txt")
+# Абсолютный путь к лог-файлу на Railway
+USER_LOG_FILE = "/app/user_messages.txt"
 
 # Твой Telegram ID для получения лога
 OWNER_ID = 741409144
@@ -49,7 +49,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
     
-    log_user_message(user, text)  # логируем любое сообщение пользователя
+    log_user_message(user, text)
 
     if text == "Проверить статистику":
         await update.message.reply_text("Введите числовой Dota ID:")
@@ -102,7 +102,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке ID {text}: {e}")
         await update.message.reply_text("Произошла ошибка при получении данных.")
 
-# /getlog — присылает файл только владельцу, проверяя наличие
+# /getlog — присылает файл только владельцу
 async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     log_user_message(user, "/getlog")
@@ -116,7 +116,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Отправка файла с указанием имени
+        # Отправляем файл с реальным содержимым
         await update.message.reply_document(InputFile(USER_LOG_FILE, filename="user_messages.txt"))
     except Exception as e:
         logging.error(f"Ошибка при отправке лога: {e}")
