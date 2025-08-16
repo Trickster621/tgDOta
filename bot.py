@@ -22,7 +22,7 @@ OWNER_ID = 741409144
 # Путь к лог-файлу
 USER_LOG_FILE = "user_messages.txt"
 if not os.path.exists(USER_LOG_FILE):
-，所以:    open(USER_LOG_FILE, "w", encoding="utf-8").close()
+    open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
 def log_user_message(user, text):
     """Сохраняем данные пользователя и сообщение в файл"""
@@ -62,7 +62,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     dota_id = text
-    url = f https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
+    url = f"https://stats.dota1x6.com/api/v2/players/?playerId={dota_id}"
     try:
         response = requests.get(url)
         if response.status_code != 200:
@@ -162,6 +162,7 @@ async def send_last_update(update: Update):
         inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
         await update.message.reply_text("Полный список обновлений:", reply_markup=InlineKeyboardMarkup(inline_keyboard))
 
+ resolutions
     except Exception as e:
         logging.error(f"Ошибка при получении обновлений: {e}")
         await update.message.reply_text("Произошла ошибка при получении обновлений.")
@@ -172,7 +173,7 @@ async def getlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(user, "/getlog")
 
     if user.id != OWNER_ID:
-        await update.message.reply_text("Нет accès")
+        await update.message.reply_text("Нет доступа")
         return
 
     if not os.path.exists(USER_LOG_FILE):
@@ -193,6 +194,7 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user.id != OWNER_ID:
         await update.message.reply_text("Нет доступа")
+ возвращает
         return
 
     with open(USER_LOG_FILE, "r", encoding="utf-8") as f:
