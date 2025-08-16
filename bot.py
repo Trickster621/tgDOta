@@ -110,26 +110,37 @@ async def send_last_update(update: Update):
             return
 
         soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.find("table")
+        # Проверяем наличие таблицы или альтернативной структуры
+        table = soup.find("table") or soup.find("div", {"role": "table"}) or soup.find("div", class_="updates-list")
         if not table:
+            logging.error(f"Не найдена таблица или контейнер обновлений. HTML: {r.text[:500]}")
             await update.message.reply_text("Не удалось найти таблицу обновлений.")
             return
 
-        rows = table.find_all("tr")[1:]  # Пропускаем заголовок
+        # Ищем строки обновлений
+        rows = table.find_all("tr") or table.find_all("div", class_="update-row") or table.find_all("div", recursive=False)
         if not rows:
+            logging.error("Не найдены строки обновлений.")
             await update.message.reply_text("Нет обновлений.")
             return
 
         first_row = rows[0]
-        tds = first_row.find_all("td")
+        # Проверяем, является ли строка tr или div
+        tds = first_row.find_all("td") or first_row.find_all("div", recursive=False)
+        if not tds:
+            logging.error("Не найдены ячейки в строке обновления.")
+            await update.message.reply_text("Не удалось извлечь данные обновления.")
+            return
+
         title_a = tds[0].find("a")
         if not title_a:
             text_update = tds[0].get_text(strip=True)
+            logging.info(f"Ссылка не найдена, используется текст: {text_update}")
             await update.message.reply_text(f"Последнее обновление:\n\n{text_update}")
             return
 
         title = title_a.get_text(strip=True)
-        link = title_a["href"]
+        link = title_a.get("href")
         full_link = link if link.startswith("https://") else f"https://dota1x6.com{link}"
 
         # Загружаем страницу обновления
@@ -155,8 +166,8 @@ async def send_last_update(update: Update):
                 img_resp = requests.get(img_url, timeout=10)
                 if img_resp.ok:
                     await update.message.reply_photo(photo=BytesIO(img_resp.content))
-            except:
-                pass
+            except Exception as e:
+                logging.error(f"Ошибка при загрузке изображения {img_url}: {e}")
 
         # Кнопка "Все обновления"
         inline_keyboard = [[InlineKeyboardButton("Все обновления", url="https://dota1x6.com/updates")]]
