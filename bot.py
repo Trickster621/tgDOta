@@ -1,4 +1,4 @@
-# bot.py — финальная интегрированная версия с Selenium
+# bot.py — финальная интегрированная версия с requests-html
 import logging
 import os
 from io import BytesIO
@@ -8,6 +8,7 @@ from datetime import datetime
 import requests
 import cloudscraper
 from bs4 import BeautifulSoup
+from requests_html import HTMLSession
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -23,15 +24,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
-# Импортируем необходимые компоненты Selenium
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
@@ -98,49 +90,27 @@ def get_latest_update_info_from_api():
         logger.exception("Error fetching or parsing latest update from API")
         return None
 
-# ---------- Selenium Web scraping ----------
-def get_page_content_with_selenium(url):
+# ---------- Requests-HTML Web scraping ----------
+def get_page_content_with_requests_html(url):
     """
     Получает полный HTML-контент страницы после выполнения JavaScript.
     """
-    driver = None
+    session = HTMLSession()
     try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
+        logger.info(f"Начинаю рендеринг страницы: {url}")
+        r = session.get(url, timeout=20)
+        r.html.render(timeout=20, sleep=1)
         
-        # Добавляем путь к драйверу, который Dockerfile устанавливает в систему
-        chrome_options.binary_location = "/usr/bin/google-chrome"
-        
-        logger.info(f"Начинаю загрузку страницы с помощью Selenium: {url}")
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.get(url)
-        
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "updates-content"))
-        )
-        
-        content = driver.page_source
+        content = r.html.html
         logger.info("Страница успешно загружена, возвращаю контент.")
         return content
     
-    except TimeoutException:
-        logger.error("Таймаут ожидания загрузки контента.")
-        return None
-    except WebDriverException as e:
-        logger.error(f"Ошибка WebDriver: {e}")
-        return None
     except Exception as e:
-        logger.error(f"Неизвестная ошибка Selenium: {e}")
+        logger.error(f"Ошибка requests-html: {e}")
         return None
     
     finally:
-        if driver:
-            logger.info("Закрываю драйвер.")
-            driver.quit()
+        session.close()
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,8 +138,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     
-    # ИСПОЛЬЗУЕМ SELENIUM для получения HTML
-    page_content = get_page_content_with_selenium(update_url)
+    # ИСПОЛЬЗУЕМ requests-html для получения HTML
+    page_content = get_page_content_with_requests_html(update_url)
     
     if not page_content:
         await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
