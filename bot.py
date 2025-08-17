@@ -92,7 +92,7 @@ def get_latest_update_info_from_api():
             logger.warning("API returned empty updates list")
             return None
             
-        return updates_list[0]  # Изменение здесь: берем самый свежий элемент
+        return updates_list[0]
             
     except requests.exceptions.HTTPError as e:
         logger.error(f"API request failed with status code {e.response.status_code}")
@@ -100,6 +100,47 @@ def get_latest_update_info_from_api():
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
         return None
+
+async def fetch_and_send_images(url, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Извлекает изображения со страницы и отправляет их в Telegram.
+    """
+    try:
+        # Используем cloudscraper для обхода Cloudflare
+        response = scraper.get(url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Находим все изображения в основном контенте
+        # Предполагаем, что они находятся в блоке с классом content или hero-info-block
+        images_found = soup.find_all('img')
+        
+        sent_images_count = 0
+        for img_tag in images_found:
+            src = img_tag.get('src')
+            if not src:
+                continue
+
+            # Преобразуем относительный URL в абсолютный
+            img_url = urljoin(url, src)
+            
+            # Проверяем, что это изображение, а не иконка, и что оно не слишком маленькое
+            if 'updates' in img_url and 'icon' not in img_url:
+                try:
+                    img_data = requests.get(img_url, timeout=5)
+                    if img_data.status_code == 200:
+                        await update.message.reply_photo(photo=BytesIO(img_data.content))
+                        sent_images_count += 1
+                except Exception as e:
+                    logger.warning(f"Не удалось отправить изображение {img_url}: {e}")
+                    continue
+        
+        if sent_images_count == 0:
+            await update.message.reply_text("Изображения не найдены или не удалось их загрузить.")
+
+    except Exception as e:
+        logger.error(f"Ошибка при поиске изображений на странице: {e}")
+        await update.message.reply_text("Произошла ошибка при загрузке изображений с сайта.")
 
 
 # ---------- Handlers ----------
@@ -128,7 +169,10 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
 
-    # Теперь получаем данные напрямую из API-адреса, который вы нашли
+    # Сначала отправляем изображения
+    await fetch_and_send_images(update_url, update, context)
+
+    # Теперь получаем и отправляем текст
     api_update_url = f"https://stats.dota1x6.com/api/v2/updates/{update_url_slug}"
     
     try:
@@ -137,10 +181,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         api_data = response.json()
         
         # Извлекаем данные из JSON
-        # Заголовок
         title = api_data.get("data", {}).get("ruName", "Без названия")
-        
-        # Основной текст из изменений героев
         text_content = ""
         heroes = api_data.get("data", {}).get("heroes", [])
         
@@ -148,7 +189,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             hero_name = hero.get("userFrendlyName", "Неизвестный герой")
             text_content += f"\n*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*:\n"
             
-            # Раздел Upgrades (Scepter, Shard и т.д.)
             upgrades = hero.get("upgrades", [])
             if upgrades:
                 text_content += f"_{escape_markdown('Улучшения:')}_\n"
@@ -157,29 +197,24 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     if ru_rows:
                         text_content += f"\- {escape_markdown(ru_rows.strip())}\n"
             
-            # Раздел Talents
             talents = hero.get("talents", [])
             if talents:
                 text_content += f"\n_{escape_markdown('Таланты:')}_\n"
                 for talent in talents:
                     name = talent.get("name", "")
                     text_content += f"\- {escape_markdown('Талант ')}{escape_markdown(name.capitalize())}:\n"
-                    # Проверяем и добавляем каждый тип таланта, если он есть
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
                         if ru_rows:
-                            # Удаляем лишние переносы строк
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
                             text_content += f"  \- {escape_markdown(formatted_rows)}\n"
         
-        # Отправляем текст
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
             text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
         
         await update.message.reply_text(text_to_send, parse_mode='MarkdownV2')
 
-        # Кнопка "Источник" и новая кнопка "Все обновления"
         kb = [[
             InlineKeyboardButton("Источник", url=update_url),
             InlineKeyboardButton("Все обновления", url=urljoin(BASE_URL, "/updates"))
