@@ -285,7 +285,7 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if favorite_hero_url:
         hero_name = favorite_hero_url.replace("npc_dota_hero_", "").capitalize()
-        msg += f"Любимый герой: {escape_markdown_v2(hero_name)}\n"
+        msg += f"Лучший герой: {escape_markdown_v2(hero_name)}\n"
         
     if youtube_url:
         yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
@@ -456,7 +456,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         
         if favorite_hero:
             hero_name = favorite_hero.replace("npc_dota_hero_", "").capitalize()
-            player_info += f"Любимый герой: {escape_markdown_v2(hero_name)}\n"
+            player_info += f"Лучший герой: {escape_markdown_v2(hero_name)}\n"
         
         social_links = []
         if youtube_url:
