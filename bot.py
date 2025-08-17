@@ -275,7 +275,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Выводит кнопки для выбора категории героев (Strength, Agility, Intellect, All).
+    Выводит кнопки для выбора категории героев (Strength, Agility, Intellect, Universal).
     """
     user = update.effective_user
     log_user_message(user, "Герои")
@@ -285,7 +285,7 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
         [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
         [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
-        [InlineKeyboardButton("All", callback_data="attribute_All")],
+        [InlineKeyboardButton("Universal", callback_data="attribute_All")],
     ]
     
     markup = InlineKeyboardMarkup(keyboard)
@@ -312,8 +312,9 @@ async def handle_attribute_callback(update: Update, context: ContextTypes.DEFAUL
         return
 
     filtered_heroes = []
+    # Исправляем логику: "All" теперь ищет героев с атрибутом "All"
     if attribute == "All":
-        filtered_heroes = heroes_data
+        filtered_heroes = [hero for hero in heroes_data if hero.get("attribute") == "All"]
     else:
         filtered_heroes = [hero for hero in heroes_data if hero.get("attribute") == attribute]
 
@@ -332,7 +333,9 @@ async def handle_attribute_callback(update: Update, context: ContextTypes.DEFAUL
     
     markup = InlineKeyboardMarkup(keyboard)
     
-    response_text = f"Список героев с атрибутом *{escape_markdown(attribute)}*:"
+    display_attribute_name = "Universal" if attribute == "All" else attribute
+    response_text = f"Список героев с атрибутом *{escape_markdown(display_attribute_name)}*:"
+    
     await query.edit_message_text(response_text, parse_mode='MarkdownV2', reply_markup=markup)
 
 
@@ -348,7 +351,7 @@ async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
         [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
         [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
-        [InlineKeyboardButton("All", callback_data="attribute_All")],
+        [InlineKeyboardButton("Universal", callback_data="attribute_All")],
     ]
     
     markup = InlineKeyboardMarkup(keyboard)
