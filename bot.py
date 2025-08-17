@@ -26,7 +26,8 @@ from telegram.ext import (
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = 741409144
+# Изменено: теперь OWNER_ID также считывается из переменной окружения
+OWNER_ID = int(os.environ.get("OWNER_ID"))
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
@@ -43,18 +44,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------- Утилиты ----------
+# ---------- УТИЛИТЫ ----------
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
+# Изменено: теперь храним 3000 последних сообщений в памяти
+RECENT_MESSAGES = deque(maxlen=3000)
+
 def log_user_message(user, text):
     try:
+        log_line = (
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | ID:{getattr(user, 'id', None)} | "
+            f"Имя:{getattr(user, 'first_name', None)} | "
+            f"Username:@{getattr(user, 'username', None)} | {text}\n"
+        )
+        # Записываем в файл
         with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(
-                f"{datetime.now()} | ID:{getattr(user, 'id', None)} | "
-                f"Имя:{getattr(user, 'first_name', None)} | "
-                f"Username:@{getattr(user, 'username', None)} | {text}\n"
-            )
+            f.write(log_line)
+        # Добавляем в очередь последних сообщений
+        RECENT_MESSAGES.append(log_line)
     except Exception:
         logger.exception("Не удалось записать лог пользователя")
 
@@ -611,47 +619,39 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ---------- НОВЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ----------
+# ---------- ОБНОВЛЁННЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ----------
 async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет последние 20 строк файла логов."""
+    """Отправляет последние 10 сообщений из памяти бота."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID:
         await update.message.reply_text("У вас нет прав для выполнения этой команды.")
         return
 
-    try:
-        if not os.path.exists(USER_LOG_FILE):
-            await update.message.reply_text("Файл логов не найден.")
-            return
-
-        with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
-            lines = deque(f, 20)
-        
-        log_text = "".join(lines)
-        if log_text:
-            await update.message.reply_text(f"Последние 20 строк лога:\n```\n{log_text}\n```", parse_mode='MarkdownV2')
-        else:
-            await update.message.reply_text("Файл логов пуст.")
-    except Exception as e:
-        logger.error(f"Ошибка при чтении лога: {e}")
-        await update.message.reply_text(f"Произошла ошибка при чтении лога: {e}")
+    if not RECENT_MESSAGES:
+        await update.message.reply_text("В памяти нет последних сообщений.")
+        return
+    
+    # Изменено: теперь выводим только последние 10 сообщений
+    last_10_messages = list(RECENT_MESSAGES)[-10:]
+    log_text = "".join(last_10_messages)
+    
+    await update.message.reply_text(f"Последние 10 сообщений:\n```\n{log_text}\n```", parse_mode='MarkdownV2')
 
 async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет полный файл логов как документ."""
+    """Отправляет все сообщения, хранящиеся в памяти."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID:
         await update.message.reply_text("У вас нет прав для выполнения этой команды.")
         return
+        
+    if not RECENT_MESSAGES:
+        await update.message.reply_text("В памяти нет сообщений.")
+        return
 
-    try:
-        if not os.path.exists(USER_LOG_FILE):
-            await update.message.reply_text("Файл логов не найден.")
-            return
-
-        await update.message.reply_document(open(USER_LOG_FILE, 'rb'))
-    except Exception as e:
-        logger.error(f"Ошибка при отправке лога: {e}")
-        await update.message.reply_text(f"Произошла ошибка при отправке лога: {e}")
+    # Изменено: выводим все сообщения из памяти
+    log_text = "".join(list(RECENT_MESSAGES))
+    
+    await send_long_message(context, update.effective_chat.id, f"Весь лог из памяти:\n```\n{log_text}\n```")
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(update.effective_user, update.message.text)
@@ -673,7 +673,7 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     
-    # Регистрация новых команд для логирования
+    # Регистрация команд для логирования
     application.add_handler(CommandHandler("previewlog", preview_log))
     application.add_handler(CommandHandler("getlog", get_log))
 
@@ -699,4 +699,9 @@ def main():
     application.run_polling()
 
 if __name__ == "__main__":
+    # Если OWNER_ID не установлен, выводим ошибку и завершаем работу.
+    if not OWNER_ID:
+        logger.error("OWNER_ID не установлен в переменных окружения. Пожалуйста, добавьте его.")
+        exit(1)
+        
     main()
