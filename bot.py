@@ -124,7 +124,6 @@ EMOJI_MAP = {
 COMBINED_EMOJI_MAP = {**SKILL_EMOJI_MAP, **EMOJI_MAP}
 
 def escape_markdown_v2(text):
-    """Экранирует специальные символы Markdown V2."""
     if not isinstance(text, str):
         return ""
     
@@ -132,10 +131,6 @@ def escape_markdown_v2(text):
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 def format_text_from_html(text):
-    """
-    Конвертирует HTML-строку в форматированный текст,
-    заменяя теги <br> на переносы строк и удаляя остальные теги.
-    """
     if not isinstance(text, str):
         return ""
 
@@ -147,10 +142,8 @@ def format_text_from_html(text):
     return formatted_text
 
 def format_text_with_emojis(text):
-    """Форматирует текст, заменяя ключевые слова на эмодзи."""
     formatted_text = format_text_from_html(text)
     
-    # Сначала заменяем многословные ключи, чтобы избежать конфликтов
     sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
     for key in sorted_keys:
         emoji = COMBINED_EMOJI_MAP[key]
@@ -179,7 +172,6 @@ def format_text_with_emojis(text):
 
 
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
-    """Отправляет длинное сообщение, разбивая его на части."""
     max_length = 4096
     
     parts = text.split('\n')
@@ -199,9 +191,6 @@ async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, p
 
 # ---------- API ----------
 async def fetch_json(url):
-    """
-    Асинхронно получает JSON-данные по заданному URL.
-    """
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=15) as response:
@@ -286,12 +275,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     latest_update_info = await fetch_json(API_UPDATES_URL)
     if not latest_update_info or not latest_update_info.get("data", {}).get("values"):
         await update.message.reply_text("Не удалось получить информацию об обновлениях с API. Попробуйте позже.")
-        return
+        return ConversationHandler.END
 
     update_url_slug = latest_update_info["data"]["values"][0].get("url")
     if not update_url_slug:
         await update.message.reply_text("В полученных данных нет ссылки на обновление. Попробуйте позже.")
-        return
+        return ConversationHandler.END
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     api_update_url = f"https://stats.dota1x6.com/api/v2/updates/{update_url_slug}"
@@ -299,7 +288,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     api_data = await fetch_json(api_update_url)
     if not api_data or not api_data.get("data"):
         await update.message.reply_text("Произошла ошибка при получении данных об обновлении. Попробуйте позже.")
-        return
+        return ConversationHandler.END
 
     data = api_data.get("data")
     title = data.get("ruName", "Без названия")
@@ -380,6 +369,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         InlineKeyboardButton("Все обновления", url=urljoin(BASE_URL, "/updates"))
     ]]
     await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
+    return ConversationHandler.END
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -399,6 +389,7 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
     elif update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=markup)
+    return ConversationHandler.END
 
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -416,7 +407,6 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         
     heroes = heroes_data.get("data", {}).get("heroes", [])
     
-    # Исправлено: убрано лишнее условие `or attribute == "All"`
     filtered_heroes = [h for h in heroes if h.get("attribute") == attribute]
     
     if not filtered_heroes:
@@ -649,7 +639,11 @@ def main():
         states={
             GET_DOTA_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)]
         },
-        fallbacks=[CommandHandler("cancel", cancel_dota_stats)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_dota_stats),
+            MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button),
+            MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button),
+        ],
         per_user=True,
     )
     application.add_handler(dota_stats_conv_handler)
