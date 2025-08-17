@@ -180,7 +180,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
             "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
             "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
-            "current": "🌊", "eye": "👁️️", "burrow": " burrow", "sand": "⏳",
+            "current": "🌊", "eye": "👁️", "burrow": " burrow", "sand": "⏳",
             "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
             "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
             "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
@@ -274,42 +274,64 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Выводит кнопки для выбора категории героев (Strength, Agility, Intellect, All).
+    """
     user = update.effective_user
     log_user_message(user, "Герои")
-    await update.message.reply_text("🔎 Загружаю список героев...")
+    
+    response_text = "Выберите атрибут героя:"
+    keyboard = [
+        [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
+        [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
+        [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
+        [InlineKeyboardButton("All", callback_data="attribute_All")],
+    ]
+    
+    markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(response_text, reply_markup=markup)
+
+
+async def handle_attribute_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обрабатывает нажатие на кнопку атрибута и выводит список героев этого атрибута.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    attribute = query.data.replace("attribute_", "")
+    log_user_message(query.from_user, f"Выбран атрибут: {attribute}")
+    
+    await query.edit_message_text(f"🔎 Загружаю список героев для атрибута {attribute}...")
 
     heroes_data = get_heroes_from_api()
 
     if not heroes_data:
-        await update.message.reply_text("Не удалось получить список героев. Попробуйте позже.")
+        await query.edit_message_text("Не удалось получить список героев. Попробуйте позже.")
         return
 
-    heroes_by_attribute = {
-        "Strength": [],
-        "Agility": [],
-        "Intellect": [],
-        "All": []
-    }
+    filtered_heroes = []
+    if attribute == "All":
+        filtered_heroes = heroes_data
+    else:
+        filtered_heroes = [hero for hero in heroes_data if hero.get("attribute") == attribute]
 
-    for hero in heroes_data:
-        attribute = hero.get("attribute", "All")
-        heroes_by_attribute[attribute].append(hero)
-
-    response_text = "Выберите героя:\n"
+    if not filtered_heroes:
+        await query.edit_message_text(f"Герои с атрибутом {attribute} не найдены.")
+        return
+        
     keyboard = []
-
-    for attribute, heroes in heroes_by_attribute.items():
-        if heroes:
-            response_text += f"\n*{escape_markdown(attribute)}*:\n"
-            for hero in sorted(heroes, key=lambda h: h.get('userFriendlyName')):
-                hero_name = hero.get("userFriendlyName", "Неизвестный герой")
-                url_name = hero.get("urlName")
-                callback_data = f"hero_{url_name}"
-                keyboard.append([InlineKeyboardButton(hero_name, callback_data=callback_data)])
-                
+    for hero in sorted(filtered_heroes, key=lambda h: h.get('userFriendlyName')):
+        hero_name = hero.get("userFriendlyName", "Неизвестный герой")
+        url_name = hero.get("urlName")
+        callback_data = f"hero_{url_name}"
+        keyboard.append([InlineKeyboardButton(hero_name, callback_data=callback_data)])
+    
     markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(response_text, parse_mode='MarkdownV2', reply_markup=markup)
+    
+    response_text = f"Список героев с атрибутом *{escape_markdown(attribute)}*:"
+    await query.edit_message_text(response_text, parse_mode='MarkdownV2', reply_markup=markup)
 
 
 async def handle_hero_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -344,16 +366,14 @@ async def handle_hero_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         if upgrades:
             text_content += f"*{escape_markdown('Улучшения')}*:\n"
             upgrade_emojis = {"shard": "🔷", "scepter": "🔮", "innate": "🔥"}
+            upgrade_ru_names = {"shard": "Аганим шард", "scepter": "Аганим", "innate": "Врожденный талант"}
             for upgrade in upgrades:
                 upgrade_type = upgrade.get("upgradeType")
                 upgrade_text = upgrade.get("upgradeText", "")
                 emoji = upgrade_emojis.get(upgrade_type, "✨")
-                if upgrade_type == "shard":
-                    text_content += f"  {emoji} {escape_markdown('Аганим шард')}: {escape_markdown(upgrade_text)}\n"
-                elif upgrade_type == "scepter":
-                    text_content += f"  {emoji} {escape_markdown('Аганим')}: {escape_markdown(upgrade_text)}\n"
-                elif upgrade_type == "innate":
-                    text_content += f"  {emoji} {escape_markdown('Врожденный талант')}: {escape_markdown(upgrade_text)}\n"
+                ru_name = upgrade_ru_names.get(upgrade_type, "")
+                if upgrade_text:
+                    text_content += f"  {emoji} {escape_markdown(ru_name)}: {escape_markdown(upgrade_text)}\n"
             text_content += "\n"
         
         # Раздел "Таланты"
@@ -494,6 +514,7 @@ def main():
     app.add_handler(conv)
     app.add_handler(MessageHandler(filters.Regex("^Обновления$"), handle_updates_button))
     app.add_handler(MessageHandler(filters.Regex("^Герои$"), handle_heroes_button))
+    app.add_handler(CallbackQueryHandler(handle_attribute_callback, pattern="^attribute_"))
     app.add_handler(CallbackQueryHandler(handle_hero_callback, pattern="^hero_"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_text))
