@@ -59,38 +59,33 @@ def escape_markdown(text):
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
 
-def format_text_with_newlines(text):
+def format_text_from_html(text):
     """
-    Добавляет переносы строк в определенных местах для лучшего форматирования,
-    основываясь на известных случаях.
+    Конвертирует HTML-строку в форматированный текст,
+    заменяя теги <br> на переносы строк и удаляя остальные теги.
     """
     if not isinstance(text, str):
         return ""
+
+    # Заменяем двойные переносы строк (<br><br>) на двойные \n
+    formatted_text = re.sub(r'<br\s*?/><br\s*?>|<br\s*?><br\s*?>|<br><br>', '\n\n', text, flags=re.IGNORECASE)
     
-    # Конкретные замены, чтобы текст выглядел как на сайте (с новой строки)
-    text = re.sub(r'применением\s*Перезарядка:', 'применением\n\nПерезарядка:', text, flags=re.IGNORECASE)
-    text = re.sub(r'здоровья\s*При этом', 'здоровья\n\nПри этом', text, flags=re.IGNORECASE)
-    text = re.sub(r'сек\s*Заканчивает действие', 'сек\n\nЗаканчивает действие', text, flags=re.IGNORECASE)
+    # Заменяем одиночные переносы строк (<br>) на одиночные \n
+    formatted_text = re.sub(r'<br\s*?/>|<br>', '\n', formatted_text, flags=re.IGNORECASE)
     
-    # Общая замена для слов, которые слились
-    text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', text)
+    # Удаляем все остальные HTML-теги
+    formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
     
-    return text
+    # Обрабатываем случаи, где слова слились (например, "обратноПривязка")
+    formatted_text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', formatted_text)
+    
+    return formatted_text
 
 def escape_html_and_format(text):
     """
-    Удаляет HTML-теги, добавляет специальные переносы строк и экранирует символы Markdown V2.
+    Вызывает функцию форматирования текста из HTML и экранирует символы Markdown.
     """
-    if not isinstance(text, str):
-        return ""
-    
-    # Регулярное выражение для поиска и удаления любых HTML-тегов
-    clean_text = re.sub(r'<[^>]+>', '', text)
-    
-    # Добавляем переносы строк
-    formatted_text = format_text_with_newlines(clean_text)
-    
-    # Экранируем символы Markdown
+    formatted_text = format_text_from_html(text)
     return escape_markdown(formatted_text)
 
 
