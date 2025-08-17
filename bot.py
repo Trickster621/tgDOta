@@ -466,17 +466,9 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]))
     elif query.data.startswith("back_to_heroes_"):
         attribute = query.data.split("_")[3]
-        # Создаем временный объект CallbackQuery для имитации
-        class TempCallbackQuery:
-            def __init__(self, data):
-                self.data = data
-                self.message = query.message
-            async def answer(self):
-                pass
         
-        temp_query = TempCallbackQuery(f"attribute_{attribute}")
-        update.callback_query = temp_query
-        
+        # Перенаправляем на handle_attribute_selection с правильными данными
+        query.data = f"attribute_{attribute}"
         await handle_attribute_selection(update, context)
 
 
