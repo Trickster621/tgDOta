@@ -289,10 +289,10 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     if youtube_url:
         yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
-        msg += f"\nYouTube: {yt_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(youtube_url)})"
+        msg += f"\n{yt_status} [{escape_markdown_v2('Ютуб')}]({escape_markdown_v2(youtube_url)})"
     if twitch_url:
         twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
-        msg += f"\nTwitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
+        msg += f"\n{twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})"
         
     await update.message.reply_text(msg, parse_mode='MarkdownV2')
 
@@ -462,7 +462,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
             social_links.append(f" {twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})")
         
         if social_links:
-            player_info += " | ".join(social_links)
+            player_info += "\\|".join(social_links)
             player_info += "\n"
         
         message_text += player_info + "\n"
