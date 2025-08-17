@@ -346,13 +346,31 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
-    # Отфильтровываем дублирующиеся "innate" из изменений
-    # Проверяем, есть ли в changes элемент с текстом "Увеличивает силу, а не макс. здоровье"
-    changes = []
-    for change in hero_json.get('changes', []):
-        if change.get('description') != "Увеличивает силу, а не макс. здоровье":
-            changes.append(change)
+    # Создаем копии списков, чтобы изменять их
+    changes = list(hero_json.get('changes', []))
+    upgrades = list(hero_json.get('upgrades', []))
+
+    # Перемещаем "innate" из изменений в улучшения
+    found_innate_change = None
+    for change in changes:
+        if change.get('name') == "innate":
+            found_innate_change = change
+            break
     
+    if found_innate_change:
+        # Создаем новый элемент для раздела "Улучшения"
+        innate_upgrade = {
+            "upgradeType": "innate",
+            "description": found_innate_change.get("description", ""),
+            "extraValues": found_innate_change.get("extraValues", [])
+        }
+        
+        # Удаляем его из списка изменений
+        changes.remove(found_innate_change)
+        
+        # Добавляем в список улучшений
+        upgrades.insert(0, innate_upgrade)  # Добавляем в начало, чтобы "Врожденная способность" была первой
+
     # 1. Отличия от Dota (Changes)
     if changes:
         text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
@@ -361,7 +379,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
-    upgrades = hero_json.get('upgrades', [])
     if upgrades:
         text_parts.append("*Улучшения:*")
         for upgrade in upgrades:
@@ -373,7 +390,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             elif upgrade_type == 'shard':
                 upgrade_title = "Аганим Шард"
             elif upgrade_type == 'innate':
-                upgrade_title = "Врожденная способность"
+                upgrade_title = "Врожденная способность 🔥" # Добавил смайлик
             
             emoji = EMOJI_MAP.get(upgrade_type, "✨")
             
@@ -386,7 +403,12 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             
             description = escape_html_and_format(upgrade.get('description', ''))
             
-            upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
+            # Для "innate" выводим только описание без заголовка
+            if upgrade_type == 'innate':
+                upgrade_text = f"• {escape_markdown(upgrade_title)} {description}"
+            else:
+                upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
+            
             text_parts.append(upgrade_text.strip())
         text_parts.append("")
 
