@@ -398,14 +398,11 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     for color, info in talents_data.items():
         if info['data']:
             text_parts.append(f"*{info['title']}:*")
+            talent_emoji = EMOJI_MAP.get(color, "✨")
             for skill_key, skill_talents in info['data'].items():
-                skill_emoji = SKILL_EMOJI_MAP.get(skill_key, "✨")
-                
                 for talent in skill_talents:
-                    talent_emoji = EMOJI_MAP.get(color)
                     description = talent.get('description', '')
                     if description:
-                        # Используем эмодзи таланта, а не скилла
                         text_parts.append(f"• {talent_emoji} {escape_html_and_format(description)}")
             text_parts.append("")
 
@@ -452,7 +449,7 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     
     await context.bot.send_message(
         chat_id=query.message.chat_id, 
-        text="Что еще?", 
+        text="Выберите следующий шаг:", 
         reply_markup=markup
     )
 
@@ -467,7 +464,7 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
             [InlineKeyboardButton("Universal", callback_data="attribute_All")],
         ]))
-    else:
+    elif query.data.startswith("back_to_heroes_"):
         attribute = query.data.split("_")[3]
         query.data = f"attribute_{attribute}"
         await handle_attribute_selection(update, context)
