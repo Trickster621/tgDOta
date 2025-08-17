@@ -1,10 +1,8 @@
 import logging
 import os
 import re
-import json
 import asyncio
 import aiohttp
-from io import BytesIO
 from urllib.parse import urljoin
 from datetime import datetime
 
@@ -18,7 +16,6 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    ConversationHandler,
     ContextTypes,
     filters,
     CallbackQueryHandler,
@@ -31,7 +28,6 @@ USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
-# НОВЫЙ URL для детальной информации о героях
 CDN_HEROES_INFO_URL = "https://cdn.dota1x6.com/shared/"
 
 # ---------- ЛОГИ ----------
@@ -39,9 +35,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Cостояния для ConversationHandler
-GET_DOTA_ID = 1
 
 # ---------- Утилиты ----------
 if not os.path.exists(USER_LOG_FILE):
@@ -66,11 +59,36 @@ def escape_markdown(text):
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
 
-def escape_html(text):
-    """Экранирует HTML-теги для корректного отображения."""
+def escape_html_and_format(text):
+    """
+    Удаляет HTML-теги и заменяет <b> на * для Markdown.
+    
+    Используется для форматирования текста, содержащего
+    HTML-теги, полученные из API.
+    """
     text = text.replace('<font color=#A3E635>', '').replace('<font color=#FB923C>', '').replace('<font color=#FFFFFF>', '').replace("</font>", "")
     text = text.replace("<b>", "*").replace("</b>", "*")
     return escape_markdown(text)
+
+async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
+    """Отправляет длинное сообщение, разбивая его на части."""
+    max_length = 4096
+    
+    # Разделяем по переводам строки
+    parts = text.split('\n\n')
+    current_message = ""
+    
+    for part in parts:
+        if len(current_message) + len(part) + 2 < max_length:
+            current_message += part + "\n\n"
+        else:
+            if current_message:
+                await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
+                await asyncio.sleep(1) # Задержка, чтобы не превысить лимит запросов
+            current_message = part + "\n\n"
+            
+    if current_message:
+        await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
 
 # ---------- API ----------
 async def fetch_json(url):
@@ -244,10 +262,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     
     text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
     
-    if len(text_to_send) > 4096:
-        text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
-    
-    await update.message.reply_text(text_to_send, parse_mode='MarkdownV2')
+    await send_long_message(context, update.effective_chat.id, text_to_send)
 
     kb = [[
         InlineKeyboardButton("Источник", url=update_url),
@@ -272,7 +287,6 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
     elif update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=markup)
-
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -307,7 +321,6 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         url_name = hero.get("urlName")
         
         if name and url_name:
-            # Передаем urlName в callback_data, потому что он нужен для формирования URL запроса
             row.append(InlineKeyboardButton(name, callback_data=f"hero_name_{url_name}"))
             if len(row) == 2:
                 keyboard.append(row)
@@ -322,11 +335,10 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         text="Выберите героя:",
         reply_markup=markup
     )
-
+    
 async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, hero_json):
     """Отправляет отформатированную информацию о герое."""
     
-    # Сборка данных о герое из нового JSON
     text_parts = []
     
     # 1. Изменения (Changes)
@@ -335,48 +347,52 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         text_parts.append("*Изменения:*")
         for change in changes:
             text_parts.append(f"• _{escape_markdown(change.get('description', ''))}_")
-
+        text_parts.append("") # Пустая строка для разделения
+    
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
     upgrades = hero_json.get('upgrades', [])
     if upgrades:
-        text_parts.append("\n*Улучшения:*")
+        text_parts.append("*Улучшения:*")
         for upgrade in upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
             
             # Определяем заголовок на основе upgradeType
             if upgrade_type == 'scepter':
-                upgrade_title = "Аганим:"
+                upgrade_title = "Аганим"
             elif upgrade_type == 'shard':
-                upgrade_title = "Аганим Шард:"
+                upgrade_title = "Аганим Шард"
             elif upgrade_type == 'innate':
-                upgrade_title = "Врожденный:"
+                upgrade_title = "Врожденный"
             else:
-                upgrade_title = ""
+                upgrade_title = "Неизвестное улучшение"
             
-            text_parts.append(f"• *{escape_markdown(upgrade_title)}* {escape_html(upgrade.get('description', ''))}")
-    
+            text_parts.append(f"• *{escape_markdown(upgrade_title)}:* {escape_html_and_format(upgrade.get('description', ''))}")
+        text_parts.append("")
+
     # 3. Таланты (Talents)
-    talents = {
+    talents_data = {
         'purple': {'title': 'Эпические таланты', 'data': hero_json.get('purpleTalents', {})},
         'blue': {'title': 'Редкие таланты', 'data': hero_json.get('blueTalents', {})},
         'orange': {'title': 'Легендарные таланты', 'data': hero_json.get('orangeTalents', {})},
     }
     
-    for color, info in talents.items():
+    for color, info in talents_data.items():
         if info['data']:
-            text_parts.append(f"\n*{info['title']}:*")
+            text_parts.append(f"*{info['title']}:*")
             for skill_key, skill_talents in info['data'].items():
                 for talent in skill_talents:
                     description = talent.get('description', '')
                     if description:
-                        text_parts.append(f"• {escape_html(description)}")
+                        text_parts.append(f"• {escape_html_and_format(description)}")
+            text_parts.append("")
 
     message_text = "\n".join(text_parts)
     
     if not message_text:
         message_text = "Информация по этому герою не найдена."
     
-    await update.callback_query.message.edit_text(message_text, parse_mode='MarkdownV2')
+    await send_long_message(context, update.callback_query.message.chat_id, message_text)
+
 
 async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -391,14 +407,10 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text("Произошла ошибка при обработке данных. Пожалуйста, сообщите об этом разработчику.")
         return
     
-    # Убираем дефисы для формирования URL
-    hero_api_url_name = hero_url_name.replace('-', '_')
-    
-    # Формируем полный URL для нового API
-    full_api_url = f"{CDN_HEROES_INFO_URL}ru_npc_dota_hero_{hero_api_url_name}.json"
-    
-    # Отправляем временное сообщение, пока ждем данные
     await query.message.edit_text(f"Загружаю информацию о герое {hero_url_name}...")
+    
+    hero_api_url_name = hero_url_name.replace('-', '_')
+    full_api_url = f"{CDN_HEROES_INFO_URL}ru_npc_dota_hero_{hero_api_url_name}.json"
     
     hero_json_data = await fetch_json(full_api_url)
     
@@ -406,6 +418,9 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
         return
 
+    # Удаляем временное сообщение перед отправкой основного
+    await query.message.delete()
+    
     # Отправляем отформатированные детали о герое
     await send_hero_details(update, context, hero_json_data)
     
