@@ -354,12 +354,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Герои")
-    
+
     keyboard = [
         [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
         [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
         [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
         [InlineKeyboardButton("Universal", callback_data="attribute_All")],
+        [InlineKeyboardButton("Посмотреть на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/heroes"))] # Добавляем кнопку Mini App
     ]
     
     markup = InlineKeyboardMarkup(keyboard)
@@ -368,6 +369,7 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
     elif update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=markup)
+
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -425,7 +427,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     changes = hero_json.get('changes', [])
     upgrades = hero_json.get('upgrades', [])
 
-    # 1. Отличия от Dota (Changes)
     if changes:
         text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
         for change in changes:
@@ -463,7 +464,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     text_parts.append(f"• _{escape_html_and_format(description)}_")
         text_parts.append("")
     
-    # 2. Улучшения (Upgrades: Aghanim, Shard)
     if upgrades:
         text_parts.append("*Улучшения:*")
         
@@ -502,7 +502,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
         text_parts.append("")
 
-    # 3. Таланты (Talents)
     talents_data = {
         'purple': {'title': 'Эпические таланты', 'data': hero_json.get('purpleTalents', {})},
         'blue': {'title': 'Редкие таланты', 'data': hero_json.get('blueTalents', {})},
@@ -573,12 +572,15 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     if query.data == "back_to_attributes":
-        await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup([
+        # Обновляем клавиатуру, чтобы она включала кнопку "Посмотреть на сайте"
+        keyboard = [
             [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
             [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
             [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
             [InlineKeyboardButton("Universal", callback_data="attribute_All")],
-        ]))
+            [InlineKeyboardButton("Посмотреть на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/heroes"))]
+        ]
+        await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(update.effective_user, update.message.text)
