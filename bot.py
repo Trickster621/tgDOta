@@ -369,26 +369,22 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
     return ConversationHandler.END
 
-async def send_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page_number: int):
+async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    log_user_message(user, "Ладдер")
+
+    sent_message = await update.message.reply_text("🏆 Загружаю ладдер...")
     
-    if 'leaderboard_data' not in context.user_data:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Данные ладдера не найдены. Пожалуйста, попробуйте еще раз.")
+    leaderboard_data = await fetch_json(API_LEADERBOARD_URL)
+    
+    if not leaderboard_data or not leaderboard_data.get("data"):
+        await sent_message.edit_text("Не удалось получить данные ладдера. Попробуйте позже.")
         return
         
-    players = context.user_data['leaderboard_data']
-    total_players = len(players)
-    total_pages = (total_players + LEADERBOARD_PAGE_SIZE - 1) // LEADERBOARD_PAGE_SIZE
+    players = leaderboard_data.get("data")
+    players_to_display = players[:50]
     
-    start_index = page_number * LEADERBOARD_PAGE_SIZE
-    end_index = min(start_index + LEADERBOARD_PAGE_SIZE, total_players)
-    
-    if start_index >= total_players:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Это последняя страница.")
-        return
-        
-    players_to_display = players[start_index:end_index]
-    
-    message_text = f"*ТОП\\-{total_players} ИГРОКОВ LADDER\\.* Страница {page_number + 1}/{total_pages}\n\n"
+    message_text = f"*ТОП-50 ИГРОКОВ LADDER\\.*\n\n"
     
     for player in players_to_display:
         place = player.get("place")
@@ -403,64 +399,13 @@ async def send_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TY
         )
         message_text += player_info
         
-    keyboard = []
-    nav_row = []
-    
-    if page_number > 0:
-        nav_row.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"leaderboard_page:{page_number - 1}"))
-    if end_index < total_players:
-        nav_row.append(InlineKeyboardButton("Вперед ➡️", callback_data=f"leaderboard_page:{page_number + 1}"))
-
-    if nav_row:
-        keyboard.append(nav_row)
-
-    keyboard.append([InlineKeyboardButton("Весь ладдер на сайте", url=f"{BASE_URL}/leaderboard")])
+    keyboard = [
+        [InlineKeyboardButton("Весь ладдер на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/leaderboard"))]
+    ]
     
     markup = InlineKeyboardMarkup(keyboard)
     
-    try:
-        # Если это CallbackQuery, пытаемся редактировать сообщение
-        if update.callback_query:
-            await update.callback_query.edit_message_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
-        # Если это обычное сообщение, отправляем новое
-        else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, reply_markup=markup, parse_mode='MarkdownV2')
-    except Exception as e:
-        logger.error(f"Failed to edit message with new leaderboard page: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, reply_markup=markup, parse_mode='MarkdownV2')
-
-
-async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    log_user_message(user, "Ладдер")
-    
-    # Сразу отправляем сообщение, чтобы не было задержки
-    sent_message = await update.message.reply_text("🏆 Загружаю ладдер...")
-
-    leaderboard_data = await fetch_json(API_LEADERBOARD_URL)
-    
-    if not leaderboard_data or not leaderboard_data.get("data"):
-        await sent_message.edit_text("Не удалось получить данные ладдера. Попробуйте позже.")
-        return
-    
-    context.user_data['leaderboard_data'] = leaderboard_data.get("data")
-    
-    # Отправляем первую страницу
-    await send_leaderboard_page(update, context, 0)
-    
-    # Удаляем сообщение "Загружаю ладдер..."
-    await sent_message.delete()
-
-async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    try:
-        _, page_number_str = query.data.split(':')
-        page_number = int(page_number_str)
-        await send_leaderboard_page(update, context, page_number)
-    except (ValueError, IndexError):
-        await query.message.reply_text("Ошибка пагинации. Попробуйте еще раз.")
+    await sent_message.edit_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
 
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -758,7 +703,6 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r'^attribute_'))
     application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
     application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_'))
-    application.add_handler(CallbackQueryHandler(handle_pagination, pattern=r'^leaderboard_page:'))
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
 
