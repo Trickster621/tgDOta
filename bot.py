@@ -23,6 +23,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler,
 )
+from telegram.error import Conflict
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -126,6 +127,15 @@ EMOJI_MAP = {
     "offline": "🟥"
 }
 COMBINED_EMOJI_MAP = {**SKILL_EMOJI_MAP, **EMOJI_MAP}
+
+# Словарь для маппинга urlName на имя файла на CDN
+CDN_HERO_NAME_MAPPING = {
+    'antimage': 'antimage',
+    'invoker': 'invoker',
+    'natures-prophet': 'furion',
+    'shadow-fiend': 'nevermore',
+    # Добавьте другие исключения, если они будут возникать
+}
 
 def escape_markdown_v2(text):
     if not isinstance(text, str):
@@ -634,7 +644,7 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     
     await query.message.edit_text(f"Загружаю информацию о герое {hero_url_name}...")
     
-    hero_api_url_name = hero_url_name.replace('-', '_')
+    hero_api_url_name = CDN_HERO_NAME_MAPPING.get(hero_url_name, hero_url_name.replace('-', '_'))
     full_api_url = f"{CDN_HEROES_INFO_URL}ru_npc_dota_hero_{hero_api_url_name}.json"
     
     hero_json_data = await fetch_json(full_api_url)
@@ -742,18 +752,16 @@ def main():
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
 
-    # Для Railway
-    # PORT = int(os.environ.get('PORT', '8443'))
-    # application.run_webhook(
-    #     listen="0.0.0.0",
-    #     port=PORT,
-    #     url_path=TOKEN,
-    #     webhook_url="https://<YOUR-RAILWAY-APP-NAME>.up.railway.app/" + TOKEN
-    # )
-
-    # Для локального запуска
-    application.run_polling()
-
+    try:
+        application.run_polling()
+    except Conflict as e:
+        logger.warning(f"Conflict error on startup: {e}. Attempting to recover...")
+        try:
+            application.updater.bot.delete_webhook()
+            application.run_polling()
+        except Exception as inner_e:
+            logger.error(f"Failed to recover from conflict: {inner_e}")
+            
 if __name__ == "__main__":
     if not OWNER_ID:
         logger.error("OWNER_ID не установлен в переменных окружения. Пожалуйста, добавьте его.")
