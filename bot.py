@@ -13,7 +13,6 @@ from telegram import (
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    WebAppInfo,
 )
 from telegram.ext import (
     Application,
@@ -32,7 +31,8 @@ USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
-CDN_HEROES_URL = "https://cdn.dota1x6.com/shared/"
+# НОВЫЙ URL для детальной информации о героях
+CDN_HEROES_INFO_URL = "https://cdn.dota1x6.com/shared/"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -65,6 +65,12 @@ def escape_markdown(text):
     
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
+
+def escape_html(text):
+    """Экранирует HTML-теги для корректного отображения."""
+    text = text.replace('<font color=#A3E635>', '').replace('<font color=#FB923C>', '').replace('<font color=#FFFFFF>', '').replace("</font>", "")
+    text = text.replace("<b>", "*").replace("</b>", "*")
+    return escape_markdown(text)
 
 # ---------- API ----------
 async def fetch_json(url):
@@ -297,11 +303,12 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     keyboard = []
     row = []
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName")):
-        # === НОВОЕ ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ userFriendlyName ДЛЯ ИМЕНИ ГЕРОЯ В КНОПКЕ ===
         name = hero.get("userFriendlyName")
+        url_name = hero.get("urlName")
         
-        if name:
-            row.append(InlineKeyboardButton(name, callback_data=f"hero_name_{name}"))
+        if name and url_name:
+            # Передаем urlName в callback_data, потому что он нужен для формирования URL запроса
+            row.append(InlineKeyboardButton(name, callback_data=f"hero_name_{url_name}"))
             if len(row) == 2:
                 keyboard.append(row)
                 row = []
@@ -316,92 +323,98 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         reply_markup=markup
     )
 
+async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, hero_json):
+    """Отправляет отформатированную информацию о герое."""
+    
+    # Сборка данных о герое из нового JSON
+    text_parts = []
+    
+    # 1. Изменения (Changes)
+    changes = hero_json.get('changes', [])
+    if changes:
+        text_parts.append("*Изменения:*")
+        for change in changes:
+            text_parts.append(f"• _{escape_markdown(change.get('description', ''))}_")
+
+    # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
+    upgrades = hero_json.get('upgrades', [])
+    if upgrades:
+        text_parts.append("\n*Улучшения:*")
+        for upgrade in upgrades:
+            upgrade_type = upgrade.get('upgradeType', 'unknown')
+            
+            # Определяем заголовок на основе upgradeType
+            if upgrade_type == 'scepter':
+                upgrade_title = "Аганим:"
+            elif upgrade_type == 'shard':
+                upgrade_title = "Аганим Шард:"
+            elif upgrade_type == 'innate':
+                upgrade_title = "Врожденный:"
+            else:
+                upgrade_title = ""
+            
+            text_parts.append(f"• *{escape_markdown(upgrade_title)}* {escape_html(upgrade.get('description', ''))}")
+    
+    # 3. Таланты (Talents)
+    talents = {
+        'purple': {'title': 'Эпические таланты', 'data': hero_json.get('purpleTalents', {})},
+        'blue': {'title': 'Редкие таланты', 'data': hero_json.get('blueTalents', {})},
+        'orange': {'title': 'Легендарные таланты', 'data': hero_json.get('orangeTalents', {})},
+    }
+    
+    for color, info in talents.items():
+        if info['data']:
+            text_parts.append(f"\n*{info['title']}:*")
+            for skill_key, skill_talents in info['data'].items():
+                for talent in skill_talents:
+                    description = talent.get('description', '')
+                    if description:
+                        text_parts.append(f"• {escape_html(description)}")
+
+    message_text = "\n".join(text_parts)
+    
+    if not message_text:
+        message_text = "Информация по этому герою не найдена."
+    
+    await update.callback_query.message.edit_text(message_text, parse_mode='MarkdownV2')
+
 async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     try:
-        # === НОВОЕ ИЗМЕНЕНИЕ: ПОЛУЧАЕМ userFriendlyName ИЗ КНОПКИ ===
-        hero_friendly_name = query.data.split("_", 2)[2]
-        if not hero_friendly_name:
+        hero_url_name = query.data.split("_", 2)[2]
+        if not hero_url_name:
             await query.message.reply_text("Не удалось получить имя героя. Пожалуйста, попробуйте выбрать героя еще раз.")
             return
     except (IndexError, ValueError):
         await query.message.reply_text("Произошла ошибка при обработке данных. Пожалуйста, сообщите об этом разработчику.")
         return
     
-    # === НОВОЕ ИЗМЕНЕНИЕ: НАХОДИМ urlName ПО userFriendlyName ===
-    heroes_data = await fetch_json(API_HEROES_URL)
-    if not heroes_data:
-        await query.edit_message_text("Не удалось получить список героев для поиска.")
-        return
+    # Убираем дефисы для формирования URL
+    hero_api_url_name = hero_url_name.replace('-', '_')
     
-    heroes = heroes_data.get("data", {}).get("heroes", [])
-    selected_hero_data = next((h for h in heroes if h.get("userFriendlyName") == hero_friendly_name), None)
-
-    if not selected_hero_data:
-        await query.edit_message_text(f"Герой '{hero_friendly_name}' не найден в базе данных.")
-        return
-
-    hero_url_name = selected_hero_data.get("urlName")
+    # Формируем полный URL для нового API
+    full_api_url = f"{CDN_HEROES_INFO_URL}ru_npc_dota_hero_{hero_api_url_name}.json"
     
-    if not hero_url_name:
-        await query.edit_message_text(f"Для героя '{hero_friendly_name}' не найден URL-идентификатор.")
-        return
-        
-    # === НОВОЕ ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ urlName В ЗАПРОСЕ ===
-    hero_data = await fetch_json(f"{API_HEROES_URL}{hero_url_name}")
+    # Отправляем временное сообщение, пока ждем данные
+    await query.message.edit_text(f"Загружаю информацию о герое {hero_url_name}...")
     
-    if not hero_data:
-        await query.edit_message_text("Не удалось получить данные о герое. Попробуйте позже.")
-        return
-
-    data = hero_data.get("data")
-    if not data:
-        await query.edit_message_text("Не удалось получить данные о герое.")
-        return
-
-    hero_name = data.get("userFriendlyName", "Неизвестный герой")
-    hero_lore = data.get("lore", "Описания нет")
-    hero_attribute = data.get("attribute", "Неизвестно")
-    hero_icon_url = data.get("icon", "")
+    hero_json_data = await fetch_json(full_api_url)
     
-    message_text = (
-        f"*{escape_markdown(hero_name)}*\n\n"
-        f"*{escape_markdown('Атрибут')}:* {escape_markdown(hero_attribute)}\n\n"
-        f"*{escape_markdown('История')}:* {escape_markdown(hero_lore)}"
-    )
+    if not hero_json_data:
+        await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
+        return
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(hero_icon_url) as resp:
-                if resp.status == 200:
-                    image_data = await resp.read()
-                    await context.bot.send_photo(
-                        chat_id=query.message.chat_id,
-                        photo=BytesIO(image_data),
-                        caption=message_text,
-                        parse_mode='MarkdownV2'
-                    )
-                else:
-                    await context.bot.send_message(
-                        chat_id=query.message.chat_id,
-                        text=message_text,
-                        parse_mode='MarkdownV2'
-                    )
-    except Exception as e:
-        logger.error(f"Failed to send photo: {e}")
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=message_text,
-            parse_mode='MarkdownV2'
-        )
+    # Отправляем отформатированные детали о герое
+    await send_hero_details(update, context, hero_json_data)
     
     keyboard = [
-        [InlineKeyboardButton("Назад", callback_data=f"back_to_heroes_{context.user_data.get('selected_attribute')}")],
+        [InlineKeyboardButton("Назад", callback_data=f"back_to_heroes_{context.user_data.get('selected_attribute', 'All')}")],
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
+    # Отправляем кнопки после основного сообщения
     await context.bot.send_message(
         chat_id=query.message.chat_id, 
         text="Что еще?", 
