@@ -408,13 +408,32 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         nickname = player.get("nickname")
         rating = player.get("rating")
         match_count = player.get("matchCount")
+        social_data = player.get("social", {})
         
+        youtube_url = social_data.get("youtube")
+        twitch_url = social_data.get("twitch")
+        is_youtube_live = social_data.get("isYoutubeLive")
+        is_twitch_live = social_data.get("isTwitchLive")
+
         player_info = (
             f"*{place}\\. {escape_markdown_v2(nickname)}*\n"
             f"Рейтинг: {rating}\n"
-            f"Игр: {match_count}\n\n"
+            f"Игр: {match_count}\n"
         )
-        message_text += player_info
+        
+        if youtube_url or twitch_url:
+            player_info += f"Социальные сети: "
+            social_links = []
+            if youtube_url:
+                yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
+                social_links.append(f"{yt_status} [{escape_markdown_v2('Ютуб')}]({escape_markdown_v2(youtube_url)})")
+            if twitch_url:
+                twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
+                social_links.append(f"{twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})")
+            player_info += " | ".join(social_links)
+            player_info += "\n"
+
+        message_text += player_info + "\n"
         
     keyboard = [
         [InlineKeyboardButton("Весь ладдер на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/leaderboard"))]
