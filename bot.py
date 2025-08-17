@@ -11,6 +11,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    WebAppInfo, # Добавляем WebAppInfo для кнопки
 )
 from telegram.ext import (
     Application,
@@ -19,6 +20,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
+    ConversationHandler, # Импортируем ConversationHandler
 )
 
 # ---------- НАСТРОЙКИ ----------
@@ -29,12 +31,16 @@ BASE_URL = "https://dota1x6.com"
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
 API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
 CDN_HEROES_INFO_URL = "https://cdn.dota1x6.com/shared/"
+API_PLAYERS_URL = "https://stats.dota1x6.com/api/v2/players/"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ---------- СОСТОЯНИЯ ДЛЯ CONVERSATIONHANDLER ----------
+GET_DOTA_ID = 1
 
 # ---------- Утилиты ----------
 if not os.path.exists(USER_LOG_FILE):
@@ -167,23 +173,6 @@ SKILL_EMOJI_MAP = {
     "movespeed": "🥾"
 }
 
-# ---------- API ----------
-async def fetch_json(url):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=15) as response:
-                response.raise_for_status()
-                return await response.json()
-    except aiohttp.ClientError as e:
-        logger.error(f"HTTP error fetching {url}: {e}")
-        return None
-    except asyncio.TimeoutError:
-        logger.error(f"Timeout fetching {url}")
-        return None
-    except Exception as e:
-        logger.error(f"An error occurred while fetching {url}: {e}")
-        return None
-
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -195,11 +184,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
-# Новый обработчик для кнопки "Проверить статистику"
-async def handle_check_stats_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    log_user_message(user, "Проверить статистику")
-    await update.message.reply_text("Эта функция находится в разработке. Пожалуйста, попробуйте 'Обновления' или 'Герои'.")
+# ---------- Функции для ConversationHandler ----------
+async def start_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запускает диалог для проверки статистики."""
+    log_user_message(update.effective_user, "Нажал 'Проверить статистику'")
+    await update.message.reply_text("Введите числовой Dota ID:")
+    return GET_DOTA_ID
+
+async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает введенный пользователем ID и запрашивает статистику."""
+    dota_id = update.message.text
+    log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
+
+    if not dota_id.isdigit():
+        await update.message.reply_text("Пожалуйста, введите только числовой Dota ID.")
+        return GET_DOTA_ID
+
+    url = f"{API_PLAYERS_URL}?playerId={dota_id}"
+    data = await fetch_json(url)
+
+    if not data or not data.get("data"):
+        await update.message.reply_text("Игрок с таким ID не найден или произошла ошибка API.")
+        return ConversationHandler.END
+
+    player_data = data.get("data")
+    match_count = player_data.get("matchCount", "неизвестно")
+    avg_place = round(player_data.get("avgPlace", 0), 2)
+    first_places = player_data.get("firstPlaces", "неизвестно")
+    rating = player_data.get("rating", "неизвестно")
+
+    msg = (
+        f"Всего игр: {match_count}\n"
+        f"Среднее место: {avg_place}\n"
+        f"Первых мест: {first_places}\n"
+        f"Рейтинг: {rating}"
+    )
+
+    await update.message.reply_text(msg)
+
+    player_url = f"{BASE_URL}/players/{dota_id}"
+    inline_keyboard = [
+        [InlineKeyboardButton("Посмотреть историю игр", web_app=WebAppInfo(url=player_url))]
+    ]
+    await update.message.reply_text(
+        "Вы можете посмотреть историю игр:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard)
+    )
+
+    return ConversationHandler.END
+
+async def cancel_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяет диалог."""
+    await update.message.reply_text("Действие отменено.")
+    return ConversationHandler.END
 
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -237,12 +274,10 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     
     for hero in heroes:
         hero_name = hero.get("userFriendlyName", "Неизвестный герой")
-        # Добавляем отступ перед каждым новым героем
         if text_content:
             text_content += "\n\n"
         text_content += f"*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*\n"
         
-        # Обработка Upgrades
         upgrades = hero.get("upgrades", [])
         for upgrade in upgrades:
             item_type = upgrade.get("type", "").lower()
@@ -262,7 +297,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     if line.strip():
                         text_content += f"  {change_emoji} {escape_markdown(line.strip())}\n"
 
-        # Обработка Talents
         talents = hero.get("talents", [])
         for talent in talents:
             talent_name = talent.get("name", "")
@@ -544,11 +578,22 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
     log_user_message(update.effective_user, update.message.text)
     await update.message.reply_text("Простите, я не понял эту команду. Пожалуйста, используйте кнопки.")
 
+
 def main():
     application = Application.builder().token(TOKEN).build()
 
+    # ConversationHandler для проверки статистики
+    dota_stats_conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex(r'^Проверить статистику$'), start_dota_stats)],
+        states={
+            GET_DOTA_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_dota_stats)],
+        per_user=True,
+    )
+    application.add_handler(dota_stats_conv_handler)
+
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Regex(r'^Проверить статистику$'), handle_check_stats_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     
@@ -556,6 +601,7 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
     application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_'))
     
+    # Обработчик неизвестных сообщений должен идти последним
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
 
     # Для Railway
