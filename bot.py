@@ -11,7 +11,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    WebAppInfo, # Добавляем WebAppInfo для кнопки
+    WebAppInfo,
 )
 from telegram.ext import (
     Application,
@@ -20,7 +20,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
-    ConversationHandler, # Импортируем ConversationHandler
+    ConversationHandler,
 )
 
 # ---------- НАСТРОЙКИ ----------
@@ -33,14 +33,14 @@ API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
 CDN_HEROES_INFO_URL = "https://cdn.dota1x6.com/shared/"
 API_PLAYERS_URL = "https://stats.dota1x6.com/api/v2/players/"
 
+# ---------- СОСТОЯНИЯ ДЛЯ CONVERSATIONHANDLER ----------
+GET_DOTA_ID = 1
+
 # ---------- ЛОГИ ----------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# ---------- СОСТОЯНИЯ ДЛЯ CONVERSATIONHANDLER ----------
-GET_DOTA_ID = 1
 
 # ---------- Утилиты ----------
 if not os.path.exists(USER_LOG_FILE):
@@ -73,16 +73,9 @@ def format_text_from_html(text):
     if not isinstance(text, str):
         return ""
 
-    # Заменяем двойные переносы строк (<br><br>) на двойные \n
     formatted_text = re.sub(r'<br\s*?/><br\s*?>|<br\s*?><br\s*?>|<br><br>', '\n\n', text, flags=re.IGNORECASE)
-    
-    # Заменяем одиночные переносы строк (<br>) на одиночные \n
     formatted_text = re.sub(r'<br\s*?/>|<br>', '\n', formatted_text, flags=re.IGNORECASE)
-    
-    # Удаляем все остальные HTML-теги
     formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
-    
-    # Обрабатываем случаи, где слова слились (например, "обратноПривязка")
     formatted_text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', formatted_text)
     
     return formatted_text
@@ -120,7 +113,6 @@ EMOJI_MAP = {
     "change": "🟡", "hero_talent": "🤓",
 }
 
-# Словарь для маппинга названий способностей на эмодзи
 SKILL_EMOJI_MAP = {
     "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
     "acid": "🧪", "unstable": "💥", "greed": "💰", "chemical": "🧪",
@@ -172,6 +164,26 @@ SKILL_EMOJI_MAP = {
     "wrath": "⛈️",
     "movespeed": "🥾"
 }
+
+# ---------- API ----------
+async def fetch_json(url):
+    """
+    Асинхронно получает JSON-данные по заданному URL.
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as response:
+                response.raise_for_status()
+                return await response.json()
+    except aiohttp.ClientError as e:
+        logger.error(f"HTTP error fetching {url}: {e}")
+        return None
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout fetching {url}")
+        return None
+    except Exception as e:
+        logger.error(f"An error occurred while fetching {url}: {e}")
+        return None
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -420,13 +432,11 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             name = change.get('name')
             description = change.get('description', '')
             
-            # Если это innate, выводим его как отдельный элемент
             if name == 'innate':
                 text_parts.append("")
                 text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*\n_{escape_html_and_format(description)}_")
             else:
                 text_parts.append("")
-                # Добавляем название способности, если оно есть
                 skill_name_lower = name.lower() if name else None
                 
                 if skill_name_lower in SKILL_EMOJI_MAP:
@@ -457,7 +467,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if upgrades:
         text_parts.append("*Улучшения:*")
         
-        # Группируем улучшения по типу
         grouped_upgrades = {}
         for upgrade in upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
@@ -465,14 +474,12 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 grouped_upgrades[upgrade_type] = []
             grouped_upgrades[upgrade_type].append(upgrade)
             
-        # Определяем порядок вывода
         upgrade_order = ['scepter', 'shard']
         
         for upgrade_type in upgrade_order:
             if upgrade_type in grouped_upgrades:
                 upgrades_to_print = grouped_upgrades[upgrade_type]
                 
-                # Выводим заголовок для группы
                 upgrade_title = "Неизвестное улучшение"
                 if upgrade_type == 'scepter':
                     upgrade_title = "Аганим"
@@ -485,7 +492,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 
                 for upgrade in upgrades_to_print:
                     description = escape_html_and_format(upgrade.get('description', ''))
-                    # Добавляем extraValues, если они есть
                     extra_values_text = ""
                     for extra_value_pair in upgrade.get('extraValues', []):
                         key = extra_value_pair[0]
@@ -582,7 +588,6 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
 def main():
     application = Application.builder().token(TOKEN).build()
 
-    # ConversationHandler для проверки статистики
     dota_stats_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(r'^Проверить статистику$'), start_dota_stats)],
         states={
@@ -601,7 +606,6 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
     application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_'))
     
-    # Обработчик неизвестных сообщений должен идти последним
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
 
     # Для Railway
