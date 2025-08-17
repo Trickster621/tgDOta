@@ -59,12 +59,18 @@ def escape_markdown(text):
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
 
+def format_text_with_spaces(text):
+    """Вставляет пробелы перед заглавными буквами, если они следуют за строчными."""
+    if not isinstance(text, str):
+        return ""
+    
+    # Ищем заглавную букву, которая идет после строчной
+    text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', text)
+    return text
+
 def escape_html_and_format(text):
     """
-    Удаляет HTML-теги и заменяет <b> на * для Markdown.
-    
-    Эта функция полностью очищает текст от HTML-тегов, таких как <br>, <b>,
-    и тегов <font>, чтобы предотвратить ошибки форматирования.
+    Удаляет HTML-теги, вставляет пробелы и экранирует символы Markdown V2.
     """
     if not isinstance(text, str):
         return ""
@@ -72,8 +78,11 @@ def escape_html_and_format(text):
     # Регулярное выражение для поиска и удаления любых HTML-тегов
     clean_text = re.sub(r'<[^>]+>', '', text)
     
-    # Теперь экранируем символы Markdown
-    return escape_markdown(clean_text)
+    # Вставляем пробелы
+    formatted_text = format_text_with_spaces(clean_text)
+    
+    # Экранируем символы Markdown
+    return escape_markdown(formatted_text)
 
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     """Отправляет длинное сообщение, разбивая его на части."""
@@ -150,7 +159,7 @@ SKILL_EMOJI_MAP = {
     "pulse": "💥", "step": "👟", "blast": "💥", "vampiric": "🩸",
     "strike": "⚔️", "reincarnation": "💀", "arc": "⚡", "bolt": "⚡", "jump": "⚡",
     "wrath": "⛈️",
-    "movespeed": "🥾"  # Добавлено новое значение
+    "movespeed": "🥾"
 }
 
 # ---------- API ----------
