@@ -257,7 +257,8 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     avg_place = round(player_info.get("avgPlace", 0), 2)
     first_places = player_info.get("firstPlaces", "неизвестно")
     rating = player_info.get("rating", "неизвестно")
-    
+    favorite_hero_url = player_info.get("favoriteHero")
+
     social_data = player_info.get("social", {})
     if social_data is None:
         social_data = {}
@@ -280,21 +281,20 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg += f"Всего игр: {escape_markdown_v2(str(match_count))}\n"
     msg += f"Среднее место: {escape_markdown_v2(str(avg_place))}\n"
     msg += f"Первых мест: {escape_markdown_v2(str(first_places))}\n"
-    msg += f"Рейтинг: {escape_markdown_v2(str(rating))}\n\n"
-
-    msg_social = ""
+    msg += f"Рейтинг: {escape_markdown_v2(str(rating))}\n"
+    
+    if favorite_hero_url:
+        hero_name = favorite_hero_url.replace("npc_dota_hero_", "").capitalize()
+        msg += f"Любимый герой: {escape_markdown_v2(hero_name)}\n"
+        
     if youtube_url:
         yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
-        msg_social += f"YouTube: {yt_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(youtube_url)})\n"
+        msg += f"YouTube: {yt_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(youtube_url)})\n"
     if twitch_url:
         twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
-        msg_social += f"Twitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
+        msg += f"Twitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
         
-    final_msg = msg
-    if msg_social:
-        final_msg += f"*{escape_markdown_v2('Социальные сети')}*\n{msg_social}"
-
-    await update.message.reply_text(final_msg, parse_mode='MarkdownV2')
+    await update.message.reply_text(msg, parse_mode='MarkdownV2')
 
     player_url = f"{BASE_URL}/players/{dota_id}"
     inline_keyboard = [
