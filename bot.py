@@ -437,8 +437,10 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         reply_markup=markup
     )
     
-async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, hero_json):
+async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, hero_json, hero_name):
     text_parts = []
+    
+    text_parts.append(f"*{escape_markdown_v2(hero_name)}*\n")
     
     changes = hero_json.get('changes', [])
     upgrades = hero_json.get('upgrades', [])
@@ -564,10 +566,12 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     if not hero_json_data:
         await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
         return
+        
+    hero_name = hero_json_data.get('userFriendlyName', 'Герой')
 
     await query.message.delete()
     
-    await send_hero_details(update, context, hero_json_data)
+    await send_hero_details(update, context, hero_json_data, hero_name)
     
     keyboard = [
         [InlineKeyboardButton("Назад", callback_data="back_to_attributes")],
