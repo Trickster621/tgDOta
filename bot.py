@@ -1,4 +1,4 @@
-# bot.py — финальная интегрированная версия с requests-html
+# bot.py — финальная интегрированная версия, использующая API
 import logging
 import os
 from io import BytesIO
@@ -8,7 +8,6 @@ from datetime import datetime
 import requests
 import cloudscraper
 from bs4 import BeautifulSoup
-from requests_html import AsyncHTMLSession
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -90,28 +89,6 @@ def get_latest_update_info_from_api():
         logger.exception("Error fetching or parsing latest update from API")
         return None
 
-# ---------- Requests-HTML Web scraping ----------
-async def get_page_content_with_requests_html(url):
-    """
-    Получает полный HTML-контент страницы после выполнения JavaScript.
-    """
-    session = AsyncHTMLSession()
-    try:
-        logger.info(f"Начинаю рендеринг страницы: {url}")
-        r = await session.get(url, timeout=20)
-        await r.html.arender(timeout=20, sleep=1)
-        
-        content = r.html.html
-        logger.info("Страница успешно загружена, возвращаю контент.")
-        return content
-    
-    except Exception as e:
-        logger.error(f"Ошибка requests-html: {e}")
-        return None
-    
-    finally:
-        await session.close()
-
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -137,54 +114,57 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
-    
-    # ИСПОЛЬЗУЕМ requests-html для получения HTML
-    page_content = await get_page_content_with_requests_html(update_url)
-    
-    if not page_content:
-        await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
-        return
 
+    # Теперь получаем данные напрямую из API-адреса, который вы нашли
+    api_update_url = f"https://stats.dota1x6.com/api/v2/updates/{update_url_slug}"
+    
     try:
-        update_soup = BeautifulSoup(page_content, "html.parser")
+        response = requests.get(api_update_url, timeout=10)
+        response.raise_for_status()
+        api_data = response.json()
         
-        # Находим заголовок и контент
-        title_element = update_soup.find("h1", class_="updates-title")
-        content_div = update_soup.find("div", class_="updates-content")
-
-        if not title_element:
-            logger.warning("Не удалось найти заголовок обновления.")
-            await update.message.reply_text("Не удалось найти заголовок обновления. Возможно, структура сайта изменилась.")
-            return
-
-        if not content_div:
-            logger.warning("Не удалось найти контент обновления.")
-            await update.message.reply_text("Не удалось найти контент обновления. Возможно, структура сайта изменилась.")
-            return
-
-        title = title_element.get_text(strip=True)
-        text = content_div.get_text(separator="\n", strip=True)
-        images = [urljoin(BASE_URL, img.get("src")) for img in content_div.find_all("img") if img.get("src")]
-
+        # Извлекаем данные из JSON
+        # Заголовок
+        title = api_data.get("data", {}).get("ruName", "Без названия")
+        
+        # Основной текст из изменений героев
+        text_content = ""
+        heroes = api_data.get("data", {}).get("heroes", [])
+        
+        for hero in heroes:
+            hero_name = hero.get("userFrendlyName", "Неизвестный герой")
+            text_content += f"\n*Изменения для {hero_name}*:\n"
+            
+            # Раздел Upgrades (Scepter, Shard и т.д.)
+            upgrades = hero.get("upgrades", [])
+            if upgrades:
+                text_content += "_Улучшения:_\n"
+                for upgrade in upgrades:
+                    ru_rows = upgrade.get("ruRows")
+                    if ru_rows:
+                        text_content += f"- {ru_rows.strip()}\n"
+            
+            # Раздел Talents
+            talents = hero.get("talents", [])
+            if talents:
+                text_content += "\n_Таланты:_\n"
+                for talent in talents:
+                    name = talent.get("name", "")
+                    text_content += f"- Талант {name.capitalize()}:\n"
+                    # Проверяем и добавляем каждый тип таланта, если он есть
+                    for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
+                        ru_rows = talent.get(color)
+                        if ru_rows:
+                            # Удаляем лишние переносы строк
+                            formatted_rows = ru_rows.replace("\r\n", "\n").strip()
+                            text_content += f"  - {formatted_rows}\n"
+        
         # Отправляем текст
-        text_to_send = f"*{title}*\n\n{text}"
+        text_to_send = f"*{title}*\n\n{text_content}"
         if len(text_to_send) > 4096:
             text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
         
         await update.message.reply_text(text_to_send, parse_mode='Markdown')
-
-        # Отправляем картинки
-        for img_url in images[:10]:
-            try:
-                await update.message.reply_photo(photo=img_url)
-            except Exception:
-                try:
-                    r = scraper.get(img_url, timeout=10)
-                    if r.status_code == 200 and r.content:
-                        bio = BytesIO(r.content)
-                        await update.message.reply_photo(photo=bio)
-                except Exception as e:
-                    logger.warning(f"Failed to send image {img_url}: {e}")
 
         # Кнопка "Читать на сайте"
         kb = [[InlineKeyboardButton("Читать на сайте", url=update_url)]]
@@ -194,7 +174,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"HTTP Error: {e.response.status_code} on {e.request.url}")
         await update.message.reply_text("Не удалось получить информацию об обновлении. Возможно, сайт недоступен.")
     except Exception as e:
-        logger.exception("Error scraping latest update from website")
+        logger.exception("Error fetching update from API")
         await update.message.reply_text("Произошла ошибка при получении данных. Попробуйте позже.")
 
 
