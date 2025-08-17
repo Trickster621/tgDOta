@@ -59,20 +59,27 @@ def escape_markdown(text):
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
 
-def format_text_with_spaces(text):
-    """Вставляет пробелы перед заглавными буквами, если они следуют за строчными."""
+def format_text_with_newlines(text):
+    """
+    Добавляет переносы строк в определенных местах для лучшего форматирования,
+    основываясь на известных случаях.
+    """
     if not isinstance(text, str):
         return ""
     
-    # Ищем заглавную букву, которая идет после строчной
+    # Конкретные замены, чтобы текст выглядел как на сайте (с новой строки)
+    text = re.sub(r'применением\s*Перезарядка:', 'применением\n\nПерезарядка:', text, flags=re.IGNORECASE)
+    text = re.sub(r'здоровья\s*При этом', 'здоровья\n\nПри этом', text, flags=re.IGNORECASE)
+    text = re.sub(r'сек\s*Заканчивает действие', 'сек\n\nЗаканчивает действие', text, flags=re.IGNORECASE)
+    
+    # Общая замена для слов, которые слились
     text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', text)
-    # Ищем заглавную букву, которая идет после точки (в случае, если точка была удалена)
-    text = re.sub(r'([.?!])([А-ЯЁ])', r'\1 \2', text)
+    
     return text
 
 def escape_html_and_format(text):
     """
-    Удаляет HTML-теги, вставляет пробелы и экранирует символы Markdown V2.
+    Удаляет HTML-теги, добавляет специальные переносы строк и экранирует символы Markdown V2.
     """
     if not isinstance(text, str):
         return ""
@@ -80,11 +87,12 @@ def escape_html_and_format(text):
     # Регулярное выражение для поиска и удаления любых HTML-тегов
     clean_text = re.sub(r'<[^>]+>', '', text)
     
-    # Вставляем пробелы
-    formatted_text = format_text_with_spaces(clean_text)
+    # Добавляем переносы строк
+    formatted_text = format_text_with_newlines(clean_text)
     
     # Экранируем символы Markdown
     return escape_markdown(formatted_text)
+
 
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     """Отправляет длинное сообщение, разбивая его на части."""
