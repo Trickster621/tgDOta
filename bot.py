@@ -370,10 +370,9 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 async def send_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page_number: int):
-    query = update.callback_query
     
     if 'leaderboard_data' not in context.user_data:
-        await query.edit_message_text("Данные ладдера не найдены. Пожалуйста, попробуйте еще раз.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Данные ладдера не найдены. Пожалуйста, попробуйте еще раз.")
         return
         
     players = context.user_data['leaderboard_data']
@@ -384,7 +383,7 @@ async def send_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TY
     end_index = min(start_index + LEADERBOARD_PAGE_SIZE, total_players)
     
     if start_index >= total_players:
-        await query.edit_message_text("Это последняя страница.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Это последняя страница.")
         return
         
     players_to_display = players[start_index:end_index]
@@ -415,15 +414,20 @@ async def send_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TY
     if nav_row:
         keyboard.append(nav_row)
 
-    keyboard.append([InlineKeyboardButton("Весь ладдер на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/leaderboard"))])
+    keyboard.append([InlineKeyboardButton("Весь ладдер на сайте", url=f"{BASE_URL}/leaderboard")])
     
     markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await query.edit_message_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
+        # Если это CallbackQuery, пытаемся редактировать сообщение
+        if update.callback_query:
+            await update.callback_query.edit_message_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
+        # Если это обычное сообщение, отправляем новое
+        else:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, reply_markup=markup, parse_mode='MarkdownV2')
     except Exception as e:
         logger.error(f"Failed to edit message with new leaderboard page: {e}")
-        await query.message.reply_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, reply_markup=markup, parse_mode='MarkdownV2')
 
 
 async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -440,11 +444,11 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         return
     
     context.user_data['leaderboard_data'] = leaderboard_data.get("data")
-    context.user_data['current_page'] = 0
     
-    query = update.callback_query if update.callback_query else type('MockQuery', (object,), {'message': sent_message, 'answer': lambda: None})()
+    # Отправляем первую страницу
+    await send_leaderboard_page(update, context, 0)
     
-    await send_leaderboard_page(Update(update_id=update.update_id, message=update.message), context, 0)
+    # Удаляем сообщение "Загружаю ладдер..."
     await sent_message.delete()
 
 async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
