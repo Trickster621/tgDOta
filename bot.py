@@ -26,7 +26,6 @@ from telegram.ext import (
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN")
-# Изменено: теперь OWNER_ID также считывается из переменной окружения
 OWNER_ID = int(os.environ.get("OWNER_ID"))
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
@@ -48,7 +47,6 @@ logger = logging.getLogger(__name__)
 if not os.path.exists(USER_LOG_FILE):
     open(USER_LOG_FILE, "w", encoding="utf-8").close()
 
-# Изменено: теперь храним 3000 последних сообщений в памяти
 RECENT_MESSAGES = deque(maxlen=3000)
 
 def log_user_message(user, text):
@@ -58,15 +56,12 @@ def log_user_message(user, text):
             f"Имя:{getattr(user, 'first_name', None)} | "
             f"Username:@{getattr(user, 'username', None)} | {text}\n"
         )
-        # Записываем в файл
         with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(log_line)
-        # Добавляем в очередь последних сообщений
         RECENT_MESSAGES.append(log_line)
     except Exception:
         logger.exception("Не удалось записать лог пользователя")
 
-# Словарь для замены названий способностей на эмодзи
 SKILL_EMOJI_MAP = {
     "Spear of Mars": "🔱", "God's Rebuke": "⚔️", "Bulwark": "🛡️", "Arena of Blood": "🏟️",
     "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
@@ -119,7 +114,6 @@ SKILL_EMOJI_MAP = {
     "wrath": "⛈️",
     "movespeed": "🥾"
 }
-# Словарь для замены ключевых слов на эмодзи
 EMOJI_MAP = {
     "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
     "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
@@ -161,14 +155,13 @@ def format_text_with_emojis(text):
     for key in sorted_keys:
         emoji = COMBINED_EMOJI_MAP[key]
         if key.lower() == 'scepter':
-            continue # Already handled below
+            continue
         if key.lower() == 'shard':
-            continue # Already handled below
+            continue
             
         pattern = r'\b' + re.escape(key) + r'\b'
         formatted_text = re.sub(pattern, f"{emoji} {key}", formatted_text, flags=re.IGNORECASE)
     
-    # Отдельно обрабатываем Aghanim Scepter и Aghanim Shard
     formatted_text = re.sub(
         r'\bAghanim Scepter\b',
         EMOJI_MAP.get("Aghanim Scepter", "🔮 Aghanim Scepter"),
@@ -235,15 +228,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
-# ---------- Функции для ConversationHandler ----------
 async def start_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Запускает диалог для проверки статистики."""
     log_user_message(update.effective_user, "Нажал 'Проверить статистику'")
     await update.message.reply_text("Введите числовой Dota ID:")
     return GET_DOTA_ID
 
 async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает введенный пользователем ID и запрашивает статистику."""
     dota_id = update.message.text
     log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
 
@@ -285,7 +275,6 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cancel_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отменяет диалог."""
     await update.message.reply_text("Действие отменено.")
     return ConversationHandler.END
 
@@ -427,7 +416,8 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
         
     heroes = heroes_data.get("data", {}).get("heroes", [])
     
-    filtered_heroes = [h for h in heroes if h.get("attribute") == attribute or attribute == "All"]
+    # Исправлено: убрано лишнее условие `or attribute == "All"`
+    filtered_heroes = [h for h in heroes if h.get("attribute") == attribute]
     
     if not filtered_heroes:
         await query.edit_message_text(
@@ -461,8 +451,6 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     )
     
 async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, hero_json):
-    """Отправляет отформатированную информацию о герое."""
-    
     text_parts = []
     
     changes = hero_json.get('changes', [])
@@ -619,9 +607,7 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ---------- ОБНОВЛЁННЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ----------
 async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет последние 10 сообщений из памяти бота."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID:
         await update.message.reply_text("У вас нет прав для выполнения этой команды.")
@@ -631,14 +617,12 @@ async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("В памяти нет последних сообщений.")
         return
     
-    # Изменено: теперь выводим только последние 10 сообщений
     last_10_messages = list(RECENT_MESSAGES)[-10:]
     log_text = "".join(last_10_messages)
     
     await update.message.reply_text(f"Последние 10 сообщений:\n```\n{log_text}\n```", parse_mode='MarkdownV2')
 
 async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет все сообщения, хранящиеся в памяти."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID:
         await update.message.reply_text("У вас нет прав для выполнения этой команды.")
@@ -648,7 +632,6 @@ async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("В памяти нет сообщений.")
         return
 
-    # Изменено: выводим все сообщения из памяти
     log_text = "".join(list(RECENT_MESSAGES))
     
     await send_long_message(context, update.effective_chat.id, f"Весь лог из памяти:\n```\n{log_text}\n```")
@@ -673,7 +656,6 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     
-    # Регистрация команд для логирования
     application.add_handler(CommandHandler("previewlog", preview_log))
     application.add_handler(CommandHandler("getlog", get_log))
 
@@ -699,7 +681,6 @@ def main():
     application.run_polling()
 
 if __name__ == "__main__":
-    # Если OWNER_ID не установлен, выводим ошибку и завершаем работу.
     if not OWNER_ID:
         logger.error("OWNER_ID не установлен в переменных окружения. Пожалуйста, добавьте его.")
         exit(1)
