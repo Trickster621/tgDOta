@@ -151,13 +151,11 @@ def format_text_with_emojis(text):
     sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
     for key in sorted_keys:
         emoji = COMBINED_EMOJI_MAP[key]
-        if key.lower() == 'scepter':
-            continue
-        if key.lower() == 'shard':
+        if key.lower() == 'scepter' or key.lower() == 'shard':
             continue
             
         pattern = r'\b' + re.escape(key) + r'\b'
-        formatted_text = re.sub(pattern, f"{emoji} {key}", flags=re.IGNORECASE)
+        formatted_text = re.sub(pattern, f"{emoji} {key}", formatted_text, flags=re.IGNORECASE)
     
     formatted_text = re.sub(
         r'\bAghanim Scepter\b',
