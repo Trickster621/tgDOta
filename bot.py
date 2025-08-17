@@ -59,7 +59,7 @@ def log_user_message(user, text):
 
 def escape_markdown(text):
     """Экранирует специальные символы Markdown V2."""
-    if not text:
+    if not isinstance(text, str):
         return ""
     
     # Символы, которые нужно экранировать в Markdown V2
@@ -146,31 +146,31 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         
         for hero in heroes:
             hero_name = hero.get("userFrendlyName", "Неизвестный герой")
-            text_content += f"\n*Изменения для {escape_markdown(hero_name)}*:\n"
+            text_content += f"\n*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*:\n"
             
             # Раздел Upgrades (Scepter, Shard и т.д.)
             upgrades = hero.get("upgrades", [])
             if upgrades:
-                text_content += "_Улучшения:_\n"
+                text_content += f"_{escape_markdown('Улучшения:')}_\n"
                 for upgrade in upgrades:
                     ru_rows = upgrade.get("ruRows")
                     if ru_rows:
-                        text_content += f"- {escape_markdown(ru_rows.strip())}\n"
+                        text_content += f"\- {escape_markdown(ru_rows.strip())}\n"
             
             # Раздел Talents
             talents = hero.get("talents", [])
             if talents:
-                text_content += "\n_Таланты:_\n"
+                text_content += f"\n_{escape_markdown('Таланты:')}_\n"
                 for talent in talents:
                     name = talent.get("name", "")
-                    text_content += f"- Талант {escape_markdown(name.capitalize())}:\n"
+                    text_content += f"\- {escape_markdown('Талант ')}{escape_markdown(name.capitalize())}:\n"
                     # Проверяем и добавляем каждый тип таланта, если он есть
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
                         if ru_rows:
                             # Удаляем лишние переносы строк
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                            text_content += f"  - {escape_markdown(formatted_rows)}\n"
+                            text_content += f"  \- {escape_markdown(formatted_rows)}\n"
         
         # Отправляем текст
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
