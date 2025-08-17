@@ -94,6 +94,63 @@ async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, p
     if current_message:
         await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
 
+EMOJI_MAP = {
+    "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
+    "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
+    "change": "🟡", "hero_talent": "🤓",
+}
+
+# Словарь для маппинга названий способностей на эмодзи
+SKILL_EMOJI_MAP = {
+    "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
+    "acid": "🧪", "unstable": "💥", "greed": "💰", "chemical": "🧪",
+    "manabreak": "⚡", "antimage_blink": "⚡", "counterspell": "🪄",
+    "manavoid": "💥", "flux": "⚡", "field": "🛡️", "spark": "💥",
+    "double": "👥", "call": "🛡️", "hunger": "🩸", "helix": "🌪️",
+    "culling": "🔪", "enfeeble": "👻", "brain": "🧠", "nightmare": "💤",
+    "grip": "✊", "bloodrage": "🩸", "bloodrite": "🩸", "thirst": "🩸",
+    "rupture": "🩸", "goo": "💦", "spray": "💥", "back": "🛡️",
+    "warpath": "🏃", "stomp": "🦶", "edge": "⚔️", "retaliate": "🛡️",
+    "stampede": "🐎", "crystal": "🧊", "frostbite": "❄️", "arcane": "🪄",
+    "freezing": "❄️", "frost": "❄️", "gust": "💨", "multishot": "🏹",
+    "marksman": "🎯", "chain": "⛓️", "fist": "👊", "guard": "🛡️",
+    "fireremnant": "🔥", "malefice": "🔮", "conversion": "🌑",
+    "midnight": "🌑", "blackhole": "🌌", "acorn": "🌰", "bush": "🐿️",
+    "scurry": "🏃", "sharp": "🎯", "inner_fire": "🔥", "burning_spears": "🔥",
+    "berserkers_blood": "🩸", "life_break": "💔", "quas": "🧊", "wex": "💨",
+    "exort": "🔥", "invoke": "🪄", "blade_fury": "🌪️", "healing_ward": "💚",
+    "blade_dance": "🗡️", "omnislash": "🗡️", "odds": "🛡️", "press": "💚",
+    "moment": "⚔️", "duel": "⚔️", "earth": "🌎", "edict": "💥", "storm": "⚡",
+    "nova": "☄️", "lifestealer_rage": "🩸", "wounds": "🩸", "ghoul": "🧟",
+    "infest": "🦠", "dragon": "🔥", "array": "⚡", "soul": "🔥", "laguna": "⚡",
+    "dispose": "🤾", "rebound": "🤸", "sidekick": "🤜", "unleash": "👊",
+    "spear": "🔱", "rebuke": "🛡️", "bulwark": "🛡️", "arena": "🏟️",
+    "boundless": "🌳", "tree": "🌳", "mastery": "👊", "command": "👑",
+    "wave": "🌊", "adaptive": "🔀", "attribute": "💪", "morph": "💧",
+    "dead": "👻", "calling": "👻", "gun": "🔫", "veil": "👻", "sprout": "🌲",
+    "teleport": " teleport", "nature_call": "🌳", "nature_wrath": "🌲",
+    "fireblast": "🔥", "ignite": "🔥", "bloodlust": "🩸", "multicast": "💥",
+    "buckle": "🛡️", "shield": "🛡️", "lucky": "🎲", "rolling": "🎳",
+    "stifling_dagger": "🔪", "phantom_strike": "👻", "blur": "💨",
+    "coup_de_grace": "🔪", "onslaught": "🐾", "trample": "🐾", "uproar": "🔊",
+    "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
+    "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
+    "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
+    "current": "🌊", "eye": "👁️", "burrow": " burrow", "sand": "⏳",
+    "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
+    "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
+    "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
+    "dance": "🕺", "scatter": "🔫", "cookie": "🍪", "shredder": "⚙️",
+    "kisses": "💋", "shrapnel": "💣", "headshot": "🎯", "aim": "🎯",
+    "assassinate": "🔪", "hammer": "🔨", "cleave": "🪓", "cry": "🗣️", "god": "⚔️",
+    "refraction": "🪄", "meld": "🪞", "psiblades": "🗡️", "psionic": "💥",
+    "reflection": "🪞", "illusion": "👻", "meta": "👹", "sunder": "💔",
+    "laser": "💥", "march": "🤖", "matrix": "🛡️", "rearm": "🔄", "rage": "👹",
+    "axes": "🪓", "fervor": "🔥", "trance": "🕺", "remnant": "🔮", "astral": "👻",
+    "pulse": "💥", "step": "👟", "blast": "💥", "vampiric": "🩸",
+    "strike": "⚔️", "reincarnation": "💀", "arc": "⚡", "bolt": "⚡", "jump": "⚡",
+    "wrath": "⛈️"
+}
 
 # ---------- API ----------
 async def fetch_json(url):
@@ -151,69 +208,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     text_content = ""
     heroes = data.get("heroes", [])
 
-    EMOJI_MAP = {
-        "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
-        "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
-        "change": "🟡", "hero_talent": "🤓",
-    }
-    
     RU_NAMES = {
         "purple": "Эпический талант", "blue": "Редкий талант", "orange": "Легендарный талант",
         "scepter": "Аганим", "innate": "Врожденный талант", "shard": "Аганим шард",
         "hero_talent": "Таланты героя", "ability": "Изменения способностей",
     }
     
-    SKILL_EMOJI_MAP = {
-        "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
-        "acid": "🧪", "unstable": "💥", "greed": "💰", "chemical": "🧪",
-        "manabreak": "⚡", "antimage_blink": "⚡", "counterspell": "🪄",
-        "manavoid": "💥", "flux": "⚡", "field": "🛡️", "spark": "💥",
-        "double": "👥", "call": "🛡️", "hunger": "🩸", "helix": "🌪️",
-        "culling": "🔪", "enfeeble": "👻", "brain": "🧠", "nightmare": "💤",
-        "grip": "✊", "bloodrage": "🩸", "bloodrite": "🩸", "thirst": "🩸",
-        "rupture": "🩸", "goo": "💦", "spray": "💥", "back": "🛡️",
-        "warpath": "🏃", "stomp": "🦶", "edge": "⚔️", "retaliate": "🛡️",
-        "stampede": "🐎", "crystal": "🧊", "frostbite": "❄️", "arcane": "🪄",
-        "freezing": "❄️", "frost": "❄️", "gust": "💨", "multishot": "🏹",
-        "marksman": "🎯", "chain": "⛓️", "fist": "👊", "guard": "🛡️",
-        "fireremnant": "🔥", "malefice": "🔮", "conversion": "🌑",
-        "midnight": "🌑", "blackhole": "🌌", "acorn": "🌰", "bush": "🐿️",
-        "scurry": "🏃", "sharp": "🎯", "inner_fire": "🔥", "burning_spears": "🔥",
-        "berserkers_blood": "🩸", "life_break": "💔", "quas": "🧊", "wex": "💨",
-        "exort": "🔥", "invoke": "🪄", "blade_fury": "🌪️", "healing_ward": "💚",
-        "blade_dance": "🗡️", "omnislash": "🗡️", "odds": "🛡️", "press": "💚",
-        "moment": "⚔️", "duel": "⚔️", "earth": "🌎", "edict": "💥", "storm": "⚡",
-        "nova": "☄️", "lifestealer_rage": "🩸", "wounds": "🩸", "ghoul": "🧟",
-        "infest": "🦠", "dragon": "🔥", "array": "⚡", "soul": "🔥", "laguna": "⚡",
-        "dispose": "🤾", "rebound": "🤸", "sidekick": "🤜", "unleash": "👊",
-        "spear": "🔱", "rebuke": "🛡️", "bulwark": "🛡️", "arena": "🏟️",
-        "boundless": "🌳", "tree": "🌳", "mastery": "👊", "command": "👑",
-        "wave": "🌊", "adaptive": "🔀", "attribute": "💪", "morph": "💧",
-        "dead": "👻", "calling": "👻", "gun": "🔫", "veil": "👻", "sprout": "🌲",
-        "teleport": " teleport", "nature_call": "🌳", "nature_wrath": "🌲",
-        "fireblast": "🔥", "ignite": "🔥", "bloodlust": "🩸", "multicast": "💥",
-        "buckle": "🛡️", "shield": "🛡️", "lucky": "🎲", "rolling": "🎳",
-        "stifling_dagger": "🔪", "phantom_strike": "👻", "blur": "💨",
-        "coup_de_grace": "🔪", "onslaught": "🐾", "trample": "🐾", "uproar": "🔊",
-        "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
-        "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
-        "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
-        "current": "🌊", "eye": "👁️", "burrow": " burrow", "sand": "⏳",
-        "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
-        "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
-        "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
-        "dance": "🕺", "scatter": "🔫", "cookie": "🍪", "shredder": "⚙️",
-        "kisses": "💋", "shrapnel": "💣", "headshot": "🎯", "aim": "🎯",
-        "assassinate": "🔪", "hammer": "🔨", "cleave": "🪓", "cry": "🗣️", "god": "⚔️",
-        "refraction": "🪄", "meld": "🪞", "psiblades": "🗡️", "psionic": "💥",
-        "reflection": "🪞", "illusion": "👻", "meta": "👹", "sunder": "💔",
-        "laser": "💥", "march": "🤖", "matrix": "🛡️", "rearm": "🔄", "rage": "👹",
-        "axes": "🪓", "fervor": "🔥", "trance": "🕺", "remnant": "🔮", "astral": "👻",
-        "pulse": "💥", "step": "👟", "blast": "💥", "vampiric": "🩸",
-        "strike": "⚔️", "reincarnation": "💀", "arc": "⚡", "bolt": "⚡", "jump": "⚡",
-        "wrath": "⛈️"
-    }
-
     for hero in heroes:
         hero_name = hero.get("userFriendlyName", "Неизвестный герой")
         text_content += f"\n*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*\n"
@@ -346,13 +346,16 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
-    # 1. Изменения (Changes)
+    # Заголовок для отличий
+    changes_title = "Отличия от Dota:"
+    text_parts.append(f"*{escape_markdown(changes_title)}*")
+    
+    # 1. Отличия от Dota (Changes)
     changes = hero_json.get('changes', [])
     if changes:
-        text_parts.append("*Изменения:*")
         for change in changes:
             text_parts.append(f"• _{escape_html_and_format(change.get('description', ''))}_")
-        text_parts.append("")
+    text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
     upgrades = hero_json.get('upgrades', [])
@@ -370,6 +373,8 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             else:
                 upgrade_title = "Неизвестное улучшение"
             
+            emoji = EMOJI_MAP.get(upgrade_type, "✨")
+            
             # Обработка extraValues для каждого улучшения
             extra_values_text = ""
             for extra_value_pair in upgrade.get('extraValues', []):
@@ -379,7 +384,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             
             description = escape_html_and_format(upgrade.get('description', ''))
             
-            upgrade_text = f"• *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
+            upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
             text_parts.append(upgrade_text.strip())
         text_parts.append("")
 
@@ -394,10 +399,12 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if info['data']:
             text_parts.append(f"*{info['title']}:*")
             for skill_key, skill_talents in info['data'].items():
+                skill_emoji = SKILL_EMOJI_MAP.get(skill_key, "✨")
+                
                 for talent in skill_talents:
                     description = talent.get('description', '')
                     if description:
-                        text_parts.append(f"• {escape_html_and_format(description)}")
+                        text_parts.append(f"• {skill_emoji} {escape_html_and_format(description)}")
             text_parts.append("")
 
     message_text = "\n".join(text_parts).strip()
