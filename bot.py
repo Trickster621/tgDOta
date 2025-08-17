@@ -139,7 +139,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         text_content = ""
         heroes = api_data.get("data", {}).get("heroes", [])
         
-        # Создаем карту эмодзи для удобства
+        # Создаем карты для эмодзи и названий
         EMOJI_MAP = {
             "purple": "🟪",
             "blue": "🟦",
@@ -147,9 +147,11 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             "scepter": "🔮",
             "innate": "🔥",
             "shard": "🔷",
+            "up": "🟢",
+            "down": "🔴",
+            "change": "🟡",
         }
 
-        # Карта для русскоязычных названий
         RU_NAMES = {
             "purple": "Эпический талант",
             "blue": "Редкий талант",
@@ -157,6 +159,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             "scepter": "Аганим",
             "innate": "Врожденный талант",
             "shard": "Аганим шард",
+            "hero_talent": "Талант героя",
         }
         
         for hero in heroes:
@@ -168,49 +171,53 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 for upgrade in upgrades:
                     item_type = upgrade.get("type")
                     ru_rows = upgrade.get("ruRows")
+                    change_type = upgrade.get("changeType", "").lower()
                     
                     if ru_rows:
                         # Получаем эмодзи и русское название
-                        emoji = EMOJI_MAP.get(item_type.lower(), "")
+                        item_emoji = EMOJI_MAP.get(item_type.lower(), "")
+                        change_emoji = EMOJI_MAP.get(change_type, "")
                         name = RU_NAMES.get(item_type.lower(), "")
                         
-                        text_content += f"\n{emoji} {escape_markdown(name)} {emoji}\n"
-                        text_content += f"  \- {escape_markdown(ru_rows.strip())}\n"
+                        text_content += f"\n{item_emoji} {escape_markdown(name)} {item_emoji}\n"
+                        text_content += f"  {change_emoji} {escape_markdown(ru_rows.strip())}\n"
             
             talents = hero.get("talents", [])
             if talents:
                 for talent in talents:
                     talent_name = talent.get("name", "")
                     
-                    # Обработка талантов, у которых есть подтипы
+                    # Заголовок для таланта (например, Laser, Rearm)
                     text_content += f"\n*{escape_markdown(talent_name.capitalize())}*:\n"
                     
                     # Проверяем все поля с русским текстом
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
+                        change_type = talent.get("changeType", "").lower()
+
                         if ru_rows:
+                            formatted_rows = ru_rows.replace("\r\n", "\n").strip()
+                            
                             # Определяем тип по полю
                             if color == "orangeRuRows":
                                 emoji = EMOJI_MAP.get("orange", "")
                                 name = RU_NAMES.get("orange", "")
+                                text_content += f" {emoji} {escape_markdown(name)} {emoji}\n"
                             elif color == "purpleRuRows":
                                 emoji = EMOJI_MAP.get("purple", "")
                                 name = RU_NAMES.get("purple", "")
+                                text_content += f" {emoji} {escape_markdown(name)} {emoji}\n"
                             elif color == "blueRuRows":
                                 emoji = EMOJI_MAP.get("blue", "")
                                 name = RU_NAMES.get("blue", "")
-                            else: # abilityRuRows
-                                emoji = ""
-                                name = ""
-                            
-                            formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                            
-                            if emoji:
                                 text_content += f" {emoji} {escape_markdown(name)} {emoji}\n"
-                                text_content += f"  \- {escape_markdown(formatted_rows)}\n"
-                            else:
-                                text_content += f"  \- {escape_markdown(formatted_rows)}\n"
-                                
+                            
+                            # Добавляем смайлик изменения перед каждой строчкой
+                            for line in formatted_rows.split('\n'):
+                                if line.strip():
+                                    change_emoji = EMOJI_MAP.get(change_type, "")
+                                    text_content += f"  {change_emoji} {escape_markdown(line.strip())}\n"
+
         
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
