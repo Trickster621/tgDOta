@@ -1,6 +1,7 @@
 # bot.py — финальная интегрированная версия, использующая API
 import logging
 import os
+import re
 from io import BytesIO
 from urllib.parse import urljoin
 from datetime import datetime
@@ -56,6 +57,17 @@ def log_user_message(user, text):
     except Exception:
         logger.exception("Не удалось записать лог пользователя")
 
+def escape_markdown(text):
+    """Экранирует специальные символы Markdown V2."""
+    if not text:
+        return ""
+    
+    # Символы, которые нужно экранировать в Markdown V2
+    # _, *, [, ], (, ), ~, `, >, #, +, -, =, |, {, }, ., !
+    escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
+    return re.sub(escape_chars, r'\\\g<0>', text)
+
+
 # ---------- Conversation states ----------
 WAITING_FOR_DOTA_ID = 1
 
@@ -88,6 +100,7 @@ def get_latest_update_info_from_api():
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
         return None
+
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,7 +146,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         
         for hero in heroes:
             hero_name = hero.get("userFrendlyName", "Неизвестный герой")
-            text_content += f"\n*Изменения для {hero_name}*:\n"
+            text_content += f"\n*Изменения для {escape_markdown(hero_name)}*:\n"
             
             # Раздел Upgrades (Scepter, Shard и т.д.)
             upgrades = hero.get("upgrades", [])
@@ -142,7 +155,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 for upgrade in upgrades:
                     ru_rows = upgrade.get("ruRows")
                     if ru_rows:
-                        text_content += f"- {ru_rows.strip()}\n"
+                        text_content += f"- {escape_markdown(ru_rows.strip())}\n"
             
             # Раздел Talents
             talents = hero.get("talents", [])
@@ -150,21 +163,21 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 text_content += "\n_Таланты:_\n"
                 for talent in talents:
                     name = talent.get("name", "")
-                    text_content += f"- Талант {name.capitalize()}:\n"
+                    text_content += f"- Талант {escape_markdown(name.capitalize())}:\n"
                     # Проверяем и добавляем каждый тип таланта, если он есть
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
                         if ru_rows:
                             # Удаляем лишние переносы строк
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                            text_content += f"  - {formatted_rows}\n"
+                            text_content += f"  - {escape_markdown(formatted_rows)}\n"
         
         # Отправляем текст
-        text_to_send = f"*{title}*\n\n{text_content}"
+        text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
             text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
         
-        await update.message.reply_text(text_to_send, parse_mode='Markdown')
+        await update.message.reply_text(text_to_send, parse_mode='MarkdownV2')
 
         # Кнопка "Читать на сайте"
         kb = [[InlineKeyboardButton("Читать на сайте", url=update_url)]]
