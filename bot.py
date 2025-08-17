@@ -121,7 +121,9 @@ EMOJI_MAP = {
     "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
     "change": "🟡", "hero_talent": "🤓",
     "Aghanim Scepter": "🔮 Aghanim Scepter",
-    "Aghanim Shard": "🔷 Aghanim Shard"
+    "Aghanim Shard": "🔷 Aghanim Shard",
+    "online": "🟩",
+    "offline": "🟥"
 }
 COMBINED_EMOJI_MAP = {**SKILL_EMOJI_MAP, **EMOJI_MAP}
 
@@ -255,15 +257,15 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg_social = ""
     if youtube_url:
-        yt_status = "🔴" if is_youtube_live else "⚪️"
+        yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
         msg_social += f"YouTube: {yt_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(youtube_url)})\n"
     if twitch_url:
-        twitch_status = "🔴" if is_twitch_live else "⚪️"
+        twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
         msg_social += f"Twitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
         
     final_msg = escape_markdown_v2(msg)
     if msg_social:
-        final_msg += f"*Социальные сети*\n{msg_social}"
+        final_msg += f"*{escape_markdown_v2('Социальные сети')}*\n{msg_social}"
 
     await update.message.reply_text(final_msg, parse_mode='MarkdownV2')
 
