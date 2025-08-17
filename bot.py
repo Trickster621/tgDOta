@@ -226,10 +226,7 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dota_id = update.message.text
     log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
 
-    if not dota_id.isdigit():
-        await update.message.reply_text("Пожалуйста, введите только числовой Dota ID.")
-        return GET_DOTA_ID
-
+    # Убрана проверка, так как она теперь в фильтре ConversationHandler
     url = f"{API_PLAYERS_URL}?playerId={dota_id}"
     data = await fetch_json(url)
 
@@ -637,12 +634,13 @@ def main():
     dota_stats_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(r'^Проверить статистику$'), start_dota_stats)],
         states={
-            GET_DOTA_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)]
+            GET_DOTA_ID: [MessageHandler(filters.Regex(r'^\d+$'), get_dota_id)]
         },
         fallbacks=[
             CommandHandler("cancel", cancel_dota_stats),
             MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button),
             MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button),
+            MessageHandler(filters.TEXT, cancel_dota_stats)
         ],
         per_user=True,
     )
