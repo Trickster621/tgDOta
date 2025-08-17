@@ -463,7 +463,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
             yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
             social_links.append(f" {yt_status} [{escape_markdown_v2('Ютуб')}]({escape_markdown_v2(youtube_url)})")
         if twitch_url:
-            twitch_status = EMOJI_MAP.2get("online") if is_twitch_live else EMOJI_MAP.get("offline")
+            twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
             social_links.append(f" {twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})")
         
         if social_links:
