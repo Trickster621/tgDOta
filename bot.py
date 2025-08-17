@@ -127,68 +127,90 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
 
+    api_update_url = f"https://stats.dota1x6.com/api/v2/updates/{update_url_slug}"
+    
     try:
-        # Получаем содержимое страницы
-        page_response = scraper.get(update_url, timeout=10)
-        page_response.raise_for_status()
-        soup = BeautifulSoup(page_response.text, 'html.parser')
-
-        # Заголовок страницы
-        title_tag = soup.find('h1', class_='title')
-        title = title_tag.text.strip() if title_tag else "Без названия"
-
+        response = requests.get(api_update_url, timeout=10)
+        response.raise_for_status()
+        api_data = response.json()
+        
+        # Извлекаем данные из JSON
+        title = api_data.get("data", {}).get("ruName", "Без названия")
         text_content = ""
+        heroes = api_data.get("data", {}).get("heroes", [])
         
-        # Находим все блоки с изменениями героев
-        hero_blocks = soup.find_all('div', class_='hero-info-block')
-        
-        # Создаем карту эмодзи на основе названий файлов
+        # Создаем карту эмодзи для удобства
         EMOJI_MAP = {
-            "epic_talent": "🟪",
             "rare_talent": "🟦",
-            "legendary_talent": "🟧",
+            "epic_talent": "🟪",
             "innate_talent": "🔥",
-            "aghanims_shard": "🔷",
-            "ultimate_scepter": "🔮",
-            "ultimate_scepter_2": "🔮", # На сайте могут быть разные файлы
+            "legendary_talent": "🟧",
+            "scepter": "🔮",
+            "shard": "🔷",
         }
-
-        for hero_block in hero_blocks:
-            hero_name_tag = hero_block.find('h2')
-            if not hero_name_tag:
-                continue
-
-            hero_name = hero_name_tag.text.strip()
+        
+        for hero in heroes:
+            hero_name = hero.get("userFrendlyName", "Неизвестный герой")
             text_content += f"\n*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*:\n"
-
-            # Проходим по всем изменениям внутри блока героя
-            change_blocks = hero_block.find_all('div', class_='change-block')
-            for change in change_blocks:
-                change_title_tag = change.find('h3')
-                change_text_tag = change.find('div', class_='change-text')
-                
-                if change_title_tag and change_text_tag:
-                    title_text = change_title_tag.text.strip()
-                    
-                    # Проверяем, есть ли картинка в заголовке для эмодзи
-                    emoji_img = change.find('img')
+            
+            upgrades = hero.get("upgrades", [])
+            if upgrades:
+                for upgrade in upgrades:
+                    item_type = upgrade.get("itemType")
                     emoji = ""
-                    if emoji_img:
-                        img_src = emoji_img.get('src', '')
-                        filename = img_src.split('/')[-1].replace('.png', '').strip()
-                        emoji = EMOJI_MAP.get(filename, "")
+                    # Проверяем и добавляем эмодзи для Scepter и Shard
+                    if item_type == "scepter":
+                        emoji = EMOJI_MAP.get("scepter", "")
+                    elif item_type == "shard":
+                        emoji = EMOJI_MAP.get("shard", "")
                     
-                    # Форматируем заголовок с эмодзи
-                    text_content += f"\n{emoji} {escape_markdown(title_text)} {emoji}\n"
+                    ru_rows = upgrade.get("ruRows")
+                    if ru_rows:
+                        text_content += f"{emoji} {escape_markdown(ru_rows.strip())} {emoji}\n"
+            
+            talents = hero.get("talents", [])
+            if talents:
+                for talent in talents:
+                    name = talent.get("name", "")
+                    emoji = ""
                     
-                    # Добавляем текст
-                    change_rows = change_text_tag.find_all('li')
-                    if change_rows:
-                        for row in change_rows:
-                            text_content += f"  \- {escape_markdown(row.text.strip())}\n"
-                    else:
-                        text_content += f"  \- {escape_markdown(change_text_tag.text.strip())}\n"
+                    # Определяем эмодзи по названию таланта
+                    if name == "rare_talent":
+                        emoji = EMOJI_MAP.get("rare_talent", "")
+                    elif name == "epic_talent":
+                        emoji = EMOJI_MAP.get("epic_talent", "")
+                    elif name == "innate_talent":
+                        emoji = EMOJI_MAP.get("innate_talent", "")
+                    elif name == "legendary_talent":
+                        emoji = EMOJI_MAP.get("legendary_talent", "")
+                    
+                    # Проверяем, что есть хотя бы один из талантов
+                    has_talents = any(talent.get(c) for c in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"])
+                    if not has_talents:
+                        continue
 
+                    # Если имя таланта совпадает с одним из типов, используем его
+                    if name in ["rare_talent", "epic_talent", "innate_talent", "legendary_talent"]:
+                        text_content += f"\n{emoji} {escape_markdown(name.capitalize())} {emoji}\n"
+                    else:
+                        text_content += f"\n*{escape_markdown(name.capitalize())}*:\n"
+                    
+                    # Добавляем строки с описанием
+                    for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
+                        ru_rows = talent.get(color)
+                        # Используем ваши подсказки для определения типа таланта
+                        talent_emoji = ""
+                        if color == "orangeRuRows":
+                            talent_emoji = EMOJI_MAP.get("legendary_talent", "")
+                        elif color == "purpleRuRows":
+                            talent_emoji = EMOJI_MAP.get("epic_talent", "")
+                        elif color == "blueRuRows":
+                            talent_emoji = EMOJI_MAP.get("rare_talent", "")
+                            
+                        if ru_rows:
+                            formatted_rows = ru_rows.replace("\r\n", "\n").strip()
+                            text_content += f" {talent_emoji} \- {escape_markdown(formatted_rows)}\n"
+        
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
             text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
@@ -205,7 +227,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"HTTP Error: {e.response.status_code} on {e.request.url}")
         await update.message.reply_text("Не удалось получить информацию об обновлении. Возможно, сайт недоступен.")
     except Exception as e:
-        logger.exception("Error fetching update from website")
+        logger.exception("Error fetching update from API")
         await update.message.reply_text("Произошла ошибка при получении данных. Попробуйте позже.")
 
 
