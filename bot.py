@@ -250,7 +250,11 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     avg_place = round(player_data.get("avgPlace", 0), 2)
     first_places = player_data.get("firstPlaces", "неизвестно")
     rating = player_data.get("rating", "неизвестно")
+    
+    # ИСПРАВЛЕНО: Проверяем, что social_data - словарь, иначе используем пустой.
     social_data = player_data.get("social", {})
+    if social_data is None:
+        social_data = {}
     
     youtube_url = social_data.get("youtube")
     twitch_url = social_data.get("twitch")
@@ -418,7 +422,11 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         nickname = player.get("nickname")
         rating = player.get("rating")
         match_count = player.get("matchCount")
+        
+        # ИСПРАВЛЕНО: Проверяем, что social_data - словарь, иначе используем пустой.
         social_data = player.get("social", {})
+        if social_data is None:
+            social_data = {}
         
         youtube_url = social_data.get("youtube")
         twitch_url = social_data.get("twitch")
