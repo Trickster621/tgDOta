@@ -443,7 +443,8 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await send_hero_details(update, context, hero_json_data)
     
     keyboard = [
-        [InlineKeyboardButton("Назад", callback_data=f"back_to_heroes_{context.user_data.get('selected_attribute', 'All')}")],
+        # Теперь все кнопки "Назад" ведут к выбору атрибутов
+        [InlineKeyboardButton("Назад", callback_data="back_to_attributes")],
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
@@ -464,12 +465,7 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
             [InlineKeyboardButton("Universal", callback_data="attribute_All")],
         ]))
-    elif query.data.startswith("back_to_heroes_"):
-        attribute = query.data.split("_")[3]
-        
-        # Перенаправляем на handle_attribute_selection с правильными данными
-        query.data = f"attribute_{attribute}"
-        await handle_attribute_selection(update, context)
+    # Предыдущий elif блок для "back_to_heroes_" удален, так как все кнопки "Назад" теперь ведут к "back_to_attributes"
 
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
