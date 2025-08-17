@@ -92,7 +92,7 @@ def get_latest_update_info_from_api():
             logger.warning("API returned empty updates list")
             return None
             
-        return updates_list[-1]  # Изменение здесь! Берем последний элемент из списка
+        return updates_list[0]  # Изменение здесь: берем самый свежий элемент
             
     except requests.exceptions.HTTPError as e:
         logger.error(f"API request failed with status code {e.response.status_code}")
@@ -179,9 +179,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         
         await update.message.reply_text(text_to_send, parse_mode='MarkdownV2')
 
-        # Кнопка "Читать на сайте"
-        kb = [[InlineKeyboardButton("Читать на сайте", url=update_url)]]
-        await update.message.reply_text("Источник:", reply_markup=InlineKeyboardMarkup(kb))
+        # Кнопка "Источник" и новая кнопка "Все обновления"
+        kb = [[
+            InlineKeyboardButton("Источник", url=update_url),
+            InlineKeyboardButton("Все обновления", url=urljoin(BASE_URL, "/updates"))
+        ]]
+        await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
 
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP Error: {e.response.status_code} on {e.request.url}")
