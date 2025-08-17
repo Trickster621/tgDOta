@@ -402,9 +402,11 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 skill_emoji = SKILL_EMOJI_MAP.get(skill_key, "✨")
                 
                 for talent in skill_talents:
+                    talent_emoji = EMOJI_MAP.get(color)
                     description = talent.get('description', '')
                     if description:
-                        text_parts.append(f"• {skill_emoji} {escape_html_and_format(description)}")
+                        # Используем эмодзи таланта, а не скилла
+                        text_parts.append(f"• {talent_emoji} {escape_html_and_format(description)}")
             text_parts.append("")
 
     message_text = "\n".join(text_parts).strip()
