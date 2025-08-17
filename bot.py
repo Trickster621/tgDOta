@@ -136,7 +136,7 @@ SKILL_EMOJI_MAP = {
     "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
     "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
     "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
-    "current": "🌊", "eye": "👁️", "burrow": " burrow", "sand": "⏳",
+    "current": "🌊", "eye": "👁️️", "burrow": " burrow", "sand": "⏳",
     "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
     "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
     "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
@@ -358,15 +358,26 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             
             # Если это innate, выводим его как отдельный элемент
             if name == 'innate':
-                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*")
-                text_parts.append(f"_{escape_html_and_format(description)}_")
+                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*\n_{escape_html_and_format(description)}_")
             else:
                 # Добавляем название способности, если оно есть
+                skill_name_lower = name.lower() if name else None
+                
+                if skill_name_lower in SKILL_EMOJI_MAP:
+                    skill_emoji = SKILL_EMOJI_MAP[skill_name_lower]
+                elif skill_name_lower in EMOJI_MAP:
+                    skill_emoji = EMOJI_MAP[skill_name_lower]
+                else:
+                    skill_emoji = ""
+
                 if name:
-                    skill_name = SKILL_EMOJI_MAP.get(name.lower(), "")
-                    description = f"({escape_markdown(name.capitalize())}) {escape_html_and_format(description)}"
+                    formatted_name = f"*{escape_markdown(name.capitalize())}*"
+                    if skill_emoji:
+                        formatted_name = f"{skill_emoji} {formatted_name}"
                     
-                text_parts.append(f"• {escape_html_and_format(description)}")
+                    text_parts.append(f"• {formatted_name}: _{escape_html_and_format(description)}_")
+                else:
+                    text_parts.append(f"• _{escape_html_and_format(description)}_")
         text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard)
@@ -400,7 +411,14 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 
                 for upgrade in upgrades_to_print:
                     description = escape_html_and_format(upgrade.get('description', ''))
-                    text_parts.append(f"{description}")
+                    # Добавляем extraValues, если они есть
+                    extra_values_text = ""
+                    for extra_value_pair in upgrade.get('extraValues', []):
+                        key = extra_value_pair[0]
+                        value = extra_value_pair[1]
+                        extra_values_text += f"_{escape_html_and_format(key)}: {escape_html_and_format(value)}_\n"
+
+                    text_parts.append(f"{extra_values_text}{description}")
 
         text_parts.append("")
 
