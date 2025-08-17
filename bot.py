@@ -261,7 +261,12 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     
     markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
+    
+    # Определяем, какой объект использовать для ответа
+    if update.message:
+        await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
+    elif update.callback_query and update.callback_query.message:
+        await update.callback_query.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -366,7 +371,6 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
-    # Отправляем новое сообщение с кнопкой "Назад", чтобы не было ошибки при изменении
     await context.bot.send_message(
         chat_id=query.message.chat_id, 
         text="Что еще?", 
@@ -378,7 +382,13 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     if query.data == "back_to_attributes":
-        await handle_heroes_button(update, context)
+        # Используем update.callback_query.message для ответа
+        await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
+            [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
+            [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
+            [InlineKeyboardButton("Universal", callback_data="attribute_All")],
+        ]))
     else:
         attribute = query.data.split("_")[3]
         query.data = f"attribute_{attribute}"
