@@ -231,7 +231,10 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     
     for hero in heroes:
         hero_name = hero.get("userFriendlyName", "Неизвестный герой")
-        text_content += f"\n*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*\n"
+        # Добавляем отступ перед каждым новым героем
+        if text_content:
+            text_content += "\n\n"
+        text_content += f"*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*\n"
         
         # Обработка Upgrades
         upgrades = hero.get("upgrades", [])
@@ -241,6 +244,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             change_type = upgrade.get("changeType", "").lower()
             
             if ru_rows:
+                if text_content.strip().endswith((']')):
+                    text_content += "\n"
                 item_emoji = EMOJI_MAP.get(item_type, "✨")
                 change_emoji = EMOJI_MAP.get(change_type, "")
                 name = RU_NAMES.get(item_type, "")
@@ -257,10 +262,14 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             talent_name = talent.get("name", "")
             
             if talent_name == "hero_talent":
+                if text_content.strip().endswith((']')):
+                    text_content += "\n"
                 name = RU_NAMES.get("hero_talent")
                 emoji = EMOJI_MAP.get("hero_talent")
                 text_content += f"\n{emoji} *{escape_markdown(name)}* {emoji}\n"
             else:
+                if text_content.strip().endswith((']')):
+                    text_content += "\n"
                 skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower(), "✨")
                 text_content += f"\n{skill_emoji} *{escape_markdown(talent_name.capitalize())}* {skill_emoji}\n"
             
@@ -373,8 +382,10 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             
             # Если это innate, выводим его как отдельный элемент
             if name == 'innate':
+                text_parts.append("")
                 text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*\n_{escape_html_and_format(description)}_")
             else:
+                text_parts.append("")
                 # Добавляем название способности, если оно есть
                 skill_name_lower = name.lower() if name else None
                 
@@ -428,6 +439,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 elif upgrade_type == 'shard':
                     upgrade_title = "Аганим Шард"
                 
+                text_parts.append("")
                 emoji = EMOJI_MAP.get(upgrade_type, "✨")
                 text_parts.append(f"• {emoji} *{escape_markdown(upgrade_title)}:*")
                 
@@ -459,6 +471,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 for talent in skill_talents:
                     description = talent.get('description', '')
                     if description:
+                        text_parts.append("")
                         text_parts.append(f"• {talent_emoji} {escape_html_and_format(description)}")
             text_parts.append("")
 
