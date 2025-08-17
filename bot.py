@@ -347,7 +347,11 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     text_parts = []
     
     # Отфильтровываем дублирующиеся "innate" из изменений
-    changes = [change for change in hero_json.get('changes', []) if change.get('upgradeType') != 'innate']
+    # Проверяем, есть ли в changes элемент с текстом "Увеличивает силу, а не макс. здоровье"
+    changes = []
+    for change in hero_json.get('changes', []):
+        if change.get('description') != "Увеличивает силу, а не макс. здоровье":
+            changes.append(change)
     
     # 1. Отличия от Dota (Changes)
     if changes:
