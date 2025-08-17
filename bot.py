@@ -92,7 +92,7 @@ def get_latest_update_info_from_api():
             logger.warning("API returned empty updates list")
             return None
             
-        return updates_list[0]
+        return updates_list[-1]  # Изменение здесь! Берем последний элемент из списка
             
     except requests.exceptions.HTTPError as e:
         logger.error(f"API request failed with status code {e.response.status_code}")
