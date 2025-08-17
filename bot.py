@@ -1,4 +1,4 @@
-# bot.py — финальная интегрированная версия без requests-html
+# bot.py — финальная интегрированная версия с requests-html
 import logging
 import os
 from io import BytesIO
@@ -8,6 +8,7 @@ from datetime import datetime
 import requests
 import cloudscraper
 from bs4 import BeautifulSoup
+from requests_html import AsyncHTMLSession
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -89,18 +90,27 @@ def get_latest_update_info_from_api():
         logger.exception("Error fetching or parsing latest update from API")
         return None
 
-# ---------- Web scraping with Cloudscraper ----------
-def get_page_content_with_cloudscraper(url):
+# ---------- Requests-HTML Web scraping ----------
+async def get_page_content_with_requests_html(url):
     """
-    Получает HTML-контент страницы, используя Cloudscraper для обхода Cloudflare.
+    Получает полный HTML-контент страницы после выполнения JavaScript.
     """
+    session = AsyncHTMLSession()
     try:
-        r = scraper.get(url, timeout=20)
-        r.raise_for_status()
-        return r.text
+        logger.info(f"Начинаю рендеринг страницы: {url}")
+        r = await session.get(url, timeout=20)
+        await r.html.arender(timeout=20, sleep=1)
+        
+        content = r.html.html
+        logger.info("Страница успешно загружена, возвращаю контент.")
+        return content
+    
     except Exception as e:
-        logger.error(f"Ошибка Cloudscraper: {e}")
+        logger.error(f"Ошибка requests-html: {e}")
         return None
+    
+    finally:
+        await session.close()
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,8 +138,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     
-    # ИСПОЛЬЗУЕМ CLOUDSCRAPER для получения HTML
-    page_content = get_page_content_with_cloudscraper(update_url)
+    # ИСПОЛЬЗУЕМ requests-html для получения HTML
+    page_content = await get_page_content_with_requests_html(update_url)
     
     if not page_content:
         await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
@@ -139,13 +149,20 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         update_soup = BeautifulSoup(page_content, "html.parser")
         
         # Находим заголовок и контент
-        title = update_soup.find("h1", class_="updates-title").get_text(strip=True) if update_soup.find("h1", class_="updates-title") else "Без названия"
+        title_element = update_soup.find("h1", class_="updates-title")
         content_div = update_soup.find("div", class_="updates-content")
-        
-        if not content_div:
-            await update.message.reply_text("Не удалось найти контент обновления. Возможно, сайт изменился.")
+
+        if not title_element:
+            logger.warning("Не удалось найти заголовок обновления.")
+            await update.message.reply_text("Не удалось найти заголовок обновления. Возможно, структура сайта изменилась.")
             return
 
+        if not content_div:
+            logger.warning("Не удалось найти контент обновления.")
+            await update.message.reply_text("Не удалось найти контент обновления. Возможно, структура сайта изменилась.")
+            return
+
+        title = title_element.get_text(strip=True)
         text = content_div.get_text(separator="\n", strip=True)
         images = [urljoin(BASE_URL, img.get("src")) for img in content_div.find_all("img") if img.get("src")]
 
