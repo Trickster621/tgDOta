@@ -141,12 +141,22 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Создаем карту эмодзи для удобства
         EMOJI_MAP = {
-            "rare_talent": "🟦",
-            "epic_talent": "🟪",
-            "innate_talent": "🔥",
-            "legendary_talent": "🟧",
+            "purple": "🟪",
+            "blue": "🟦",
+            "orange": "🟧",
             "scepter": "🔮",
+            "innate": "🔥",
             "shard": "🔷",
+        }
+
+        # Карта для русскоязычных названий
+        RU_NAMES = {
+            "purple": "Эпический талант",
+            "blue": "Редкий талант",
+            "orange": "Легендарный талант",
+            "scepter": "Аганим",
+            "innate": "Врожденный талант",
+            "shard": "Аганим шард",
         }
         
         for hero in heroes:
@@ -156,60 +166,51 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             upgrades = hero.get("upgrades", [])
             if upgrades:
                 for upgrade in upgrades:
-                    item_type = upgrade.get("itemType")
-                    emoji = ""
-                    # Проверяем и добавляем эмодзи для Scepter и Shard
-                    if item_type == "scepter":
-                        emoji = EMOJI_MAP.get("scepter", "")
-                    elif item_type == "shard":
-                        emoji = EMOJI_MAP.get("shard", "")
-                    
+                    item_type = upgrade.get("type")
                     ru_rows = upgrade.get("ruRows")
+                    
                     if ru_rows:
-                        text_content += f"{emoji} {escape_markdown(ru_rows.strip())} {emoji}\n"
+                        # Получаем эмодзи и русское название
+                        emoji = EMOJI_MAP.get(item_type.lower(), "")
+                        name = RU_NAMES.get(item_type.lower(), "")
+                        
+                        text_content += f"\n{emoji} {escape_markdown(name)} {emoji}\n"
+                        text_content += f"  \- {escape_markdown(ru_rows.strip())}\n"
             
             talents = hero.get("talents", [])
             if talents:
                 for talent in talents:
-                    name = talent.get("name", "")
-                    emoji = ""
+                    talent_name = talent.get("name", "")
                     
-                    # Определяем эмодзи по названию таланта
-                    if name == "rare_talent":
-                        emoji = EMOJI_MAP.get("rare_talent", "")
-                    elif name == "epic_talent":
-                        emoji = EMOJI_MAP.get("epic_talent", "")
-                    elif name == "innate_talent":
-                        emoji = EMOJI_MAP.get("innate_talent", "")
-                    elif name == "legendary_talent":
-                        emoji = EMOJI_MAP.get("legendary_talent", "")
+                    # Обработка талантов, у которых есть подтипы
+                    text_content += f"\n*{escape_markdown(talent_name.capitalize())}*:\n"
                     
-                    # Проверяем, что есть хотя бы один из талантов
-                    has_talents = any(talent.get(c) for c in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"])
-                    if not has_talents:
-                        continue
-
-                    # Если имя таланта совпадает с одним из типов, используем его
-                    if name in ["rare_talent", "epic_talent", "innate_talent", "legendary_talent"]:
-                        text_content += f"\n{emoji} {escape_markdown(name.capitalize())} {emoji}\n"
-                    else:
-                        text_content += f"\n*{escape_markdown(name.capitalize())}*:\n"
-                    
-                    # Добавляем строки с описанием
+                    # Проверяем все поля с русским текстом
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
-                        # Используем ваши подсказки для определения типа таланта
-                        talent_emoji = ""
-                        if color == "orangeRuRows":
-                            talent_emoji = EMOJI_MAP.get("legendary_talent", "")
-                        elif color == "purpleRuRows":
-                            talent_emoji = EMOJI_MAP.get("epic_talent", "")
-                        elif color == "blueRuRows":
-                            talent_emoji = EMOJI_MAP.get("rare_talent", "")
-                            
                         if ru_rows:
+                            # Определяем тип по полю
+                            if color == "orangeRuRows":
+                                emoji = EMOJI_MAP.get("orange", "")
+                                name = RU_NAMES.get("orange", "")
+                            elif color == "purpleRuRows":
+                                emoji = EMOJI_MAP.get("purple", "")
+                                name = RU_NAMES.get("purple", "")
+                            elif color == "blueRuRows":
+                                emoji = EMOJI_MAP.get("blue", "")
+                                name = RU_NAMES.get("blue", "")
+                            else: # abilityRuRows
+                                emoji = ""
+                                name = ""
+                            
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                            text_content += f" {talent_emoji} \- {escape_markdown(formatted_rows)}\n"
+                            
+                            if emoji:
+                                text_content += f" {emoji} {escape_markdown(name)} {emoji}\n"
+                                text_content += f"  \- {escape_markdown(formatted_rows)}\n"
+                            else:
+                                text_content += f"  \- {escape_markdown(formatted_rows)}\n"
+                                
         
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
