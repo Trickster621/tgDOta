@@ -57,63 +57,9 @@ def log_user_message(user, text):
     except Exception:
         logger.exception("Не удалось записать лог пользователя")
 
-def escape_markdown(text):
-    """Экранирует специальные символы Markdown V2."""
-    if not isinstance(text, str):
-        return ""
-    
-    escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
-    return re.sub(escape_chars, r'\\\g<0>', text)
-
-def format_text_from_html(text):
-    """
-    Конвертирует HTML-строку в форматированный текст,
-    заменяя теги <br> на переносы строк и удаляя остальные теги.
-    """
-    if not isinstance(text, str):
-        return ""
-
-    formatted_text = re.sub(r'<br\s*?/><br\s*?>|<br\s*?><br\s*?>|<br><br>', '\n\n', text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'<br\s*?/>|<br>', '\n', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
-    formatted_text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', formatted_text)
-    
-    return formatted_text
-
-def escape_html_and_format(text):
-    """
-    Вызывает функцию форматирования текста из HTML и экранирует символы Markdown.
-    """
-    formatted_text = format_text_from_html(text)
-    return escape_markdown(formatted_text)
-
-
-async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
-    """Отправляет длинное сообщение, разбивая его на части."""
-    max_length = 4096
-    
-    parts = text.split('\n')
-    current_message = ""
-    
-    for part in parts:
-        if len(current_message) + len(part) + 1 < max_length:
-            current_message += part + "\n"
-        else:
-            if current_message:
-                await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
-                await asyncio.sleep(0.5)
-            current_message = part + "\n"
-            
-    if current_message:
-        await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
-
-EMOJI_MAP = {
-    "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
-    "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
-    "change": "🟡", "hero_talent": "🤓",
-}
-
+# Словарь для замены названий способностей на эмодзи
 SKILL_EMOJI_MAP = {
+    "Spear of Mars": "🔱", "God's Rebuke": "⚔️", "Bulwark": "🛡️", "Arena of Blood": "🏟️",
     "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
     "acid": "🧪", "unstable": "💥", "greed": "💰", "chemical": "🧪",
     "manabreak": "⚡", "antimage_blink": "⚡", "counterspell": "🪄",
@@ -164,6 +110,90 @@ SKILL_EMOJI_MAP = {
     "wrath": "⛈️",
     "movespeed": "🥾"
 }
+# Словарь для замены ключевых слов на эмодзи
+EMOJI_MAP = {
+    "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
+    "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
+    "change": "🟡", "hero_talent": "🤓",
+    "Aghanim Scepter": "🔮 Aghanim Scepter",
+    "Aghanim Shard": "🔷 Aghanim Shard"
+}
+COMBINED_EMOJI_MAP = {**SKILL_EMOJI_MAP, **EMOJI_MAP}
+
+def escape_markdown_v2(text):
+    """Экранирует специальные символы Markdown V2."""
+    if not isinstance(text, str):
+        return ""
+    
+    escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+def format_text_from_html(text):
+    """
+    Конвертирует HTML-строку в форматированный текст,
+    заменяя теги <br> на переносы строк и удаляя остальные теги.
+    """
+    if not isinstance(text, str):
+        return ""
+
+    formatted_text = re.sub(r'<br\s*?/><br\s*?>|<br\s*?><br\s*?>|<br><br>', '\n\n', text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'<br\s*?/>|<br>', '\n', formatted_text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
+    formatted_text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', formatted_text)
+    
+    return formatted_text
+
+def format_text_with_emojis(text):
+    """Форматирует текст, заменяя ключевые слова на эмодзи."""
+    formatted_text = format_text_from_html(text)
+    
+    # Сначала заменяем многословные ключи, чтобы избежать конфликтов
+    sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
+    for key in sorted_keys:
+        emoji = COMBINED_EMOJI_MAP[key]
+        if key.lower() == 'scepter':
+            continue # Already handled below
+        if key.lower() == 'shard':
+            continue # Already handled below
+            
+        pattern = r'\b' + re.escape(key) + r'\b'
+        formatted_text = re.sub(pattern, f"{emoji} {key}", formatted_text, flags=re.IGNORECASE)
+    
+    # Отдельно обрабатываем Aghanim Scepter и Aghanim Shard
+    formatted_text = re.sub(
+        r'\bAghanim Scepter\b',
+        EMOJI_MAP.get("Aghanim Scepter", "🔮 Aghanim Scepter"),
+        formatted_text,
+        flags=re.IGNORECASE
+    )
+    formatted_text = re.sub(
+        r'\bAghanim Shard\b',
+        EMOJI_MAP.get("Aghanim Shard", "🔷 Aghanim Shard"),
+        formatted_text,
+        flags=re.IGNORECASE
+    )
+        
+    return escape_markdown_v2(formatted_text)
+
+
+async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
+    """Отправляет длинное сообщение, разбивая его на части."""
+    max_length = 4096
+    
+    parts = text.split('\n')
+    current_message = ""
+    
+    for part in parts:
+        if len(current_message) + len(part) + 1 < max_length:
+            current_message += part + "\n"
+        else:
+            if current_message:
+                await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
+                await asyncio.sleep(0.5)
+            current_message = part + "\n"
+            
+    if current_message:
+        await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
 
 # ---------- API ----------
 async def fetch_json(url):
@@ -288,7 +318,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         hero_name = hero.get("userFriendlyName", "Неизвестный герой")
         if text_content:
             text_content += "\n\n"
-        text_content += f"*{escape_markdown('Изменения для ')}{escape_markdown(hero_name)}*\n"
+        text_content += f"*{escape_markdown_v2('Изменения для ')}{escape_markdown_v2(hero_name)}*\n"
         
         upgrades = hero.get("upgrades", [])
         for upgrade in upgrades:
@@ -303,11 +333,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 change_emoji = EMOJI_MAP.get(change_type, "")
                 name = RU_NAMES.get(item_type, "")
                 
-                text_content += f"\n{item_emoji} {escape_markdown(name)} {item_emoji}\n"
+                text_content += f"\n{item_emoji} {escape_markdown_v2(name)} {item_emoji}\n"
                 
                 for line in ru_rows.replace("\r\n", "\n").split('\n'):
                     if line.strip():
-                        text_content += f"  {change_emoji} {escape_markdown(line.strip())}\n"
+                        formatted_line = format_text_with_emojis(line.strip())
+                        text_content += f"  {change_emoji} {formatted_line}\n"
 
         talents = hero.get("talents", [])
         for talent in talents:
@@ -318,12 +349,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     text_content += "\n"
                 name = RU_NAMES.get("hero_talent")
                 emoji = EMOJI_MAP.get("hero_talent")
-                text_content += f"\n{emoji} *{escape_markdown(name)}* {emoji}\n"
+                text_content += f"\n{emoji} *{escape_markdown_v2(name)}* {emoji}\n"
             else:
                 if text_content.strip().endswith((']')):
                     text_content += "\n"
                 skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower(), "✨")
-                text_content += f"\n{skill_emoji} *{escape_markdown(talent_name.capitalize())}* {skill_emoji}\n"
+                text_content += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}* {skill_emoji}\n"
             
             for color_key in ["orange", "purple", "blue", "ability"]:
                 ru_rows = talent.get(f"{color_key}RuRows")
@@ -335,13 +366,14 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     change_emoji = EMOJI_MAP.get(change_type, "🟡")
 
                     if name:
-                        text_content += f" {emoji} *{escape_markdown(name)}* {emoji}\n"
+                        text_content += f" {emoji} *{escape_markdown_v2(name)}* {emoji}\n"
                     
                     for line in formatted_rows.split('\n'):
                         if line.strip():
-                            text_content += f"  {change_emoji} {escape_markdown(line.strip())}\n"
+                            formatted_line = format_text_with_emojis(line.strip())
+                            text_content += f"  {change_emoji} {formatted_line}\n"
     
-    text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
+    text_to_send = f"*{escape_markdown_v2(title)}*\n\n{text_content}"
     
     await send_long_message(context, update.effective_chat.id, text_to_send)
 
@@ -360,7 +392,7 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
         [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
         [InlineKeyboardButton("Universal", callback_data="attribute_All")],
-        [InlineKeyboardButton("Посмотреть на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/heroes"))] # Добавляем кнопку Mini App
+        [InlineKeyboardButton("Посмотреть на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/heroes"))]
     ]
     
     markup = InlineKeyboardMarkup(keyboard)
@@ -428,14 +460,15 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     upgrades = hero_json.get('upgrades', [])
 
     if changes:
-        text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
+        text_parts.append(f"*{escape_markdown_v2('Отличия от Dota:')}*")
         for change in changes:
             name = change.get('name')
             description = change.get('description', '')
             
             if name == 'innate':
                 text_parts.append("")
-                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*\n_{escape_html_and_format(description)}_")
+                formatted_desc = format_text_with_emojis(description)
+                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown_v2('Врожденная способность:')}*\n_{formatted_desc}_")
             else:
                 text_parts.append("")
                 skill_name_lower = name.lower() if name else None
@@ -446,22 +479,17 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     skill_emoji = EMOJI_MAP[skill_name_lower]
                 else:
                     skill_emoji = ""
-
+                
                 if name:
-                    formatted_name = f"*{escape_markdown(name.capitalize())}*"
+                    formatted_name = f"*{escape_markdown_v2(name.capitalize())}*"
                     if skill_emoji:
                         formatted_name = f"{skill_emoji} {formatted_name}"
                     
-                    description_with_emojis = re.sub(
-                        r'Aghanim Shard', f'{EMOJI_MAP.get("shard")} Aghanim Shard', description
-                    )
-                    description_with_emojis = re.sub(
-                        r'Aghanim Scepter', f'{EMOJI_MAP.get("scepter")} Aghanim Scepter', description_with_emojis
-                    )
-                    
-                    text_parts.append(f"• {formatted_name}: _{escape_html_and_format(description_with_emojis)}_")
+                    formatted_desc = format_text_with_emojis(description)
+                    text_parts.append(f"• {formatted_name}: _{formatted_desc}_")
                 else:
-                    text_parts.append(f"• _{escape_html_and_format(description)}_")
+                    formatted_desc = format_text_with_emojis(description)
+                    text_parts.append(f"• _{formatted_desc}_")
         text_parts.append("")
     
     if upgrades:
@@ -488,15 +516,15 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 
                 text_parts.append("")
                 emoji = EMOJI_MAP.get(upgrade_type, "✨")
-                text_parts.append(f"• {emoji} *{escape_markdown(upgrade_title)}:*")
+                text_parts.append(f"• {emoji} *{escape_markdown_v2(upgrade_title)}:*")
                 
                 for upgrade in upgrades_to_print:
-                    description = escape_html_and_format(upgrade.get('description', ''))
+                    description = format_text_with_emojis(upgrade.get('description', ''))
                     extra_values_text = ""
                     for extra_value_pair in upgrade.get('extraValues', []):
                         key = extra_value_pair[0]
                         value = extra_value_pair[1]
-                        extra_values_text += f"_{escape_html_and_format(key)}: {escape_html_and_format(value)}_\n"
+                        extra_values_text += f"_{format_text_with_emojis(key)}: {format_text_with_emojis(value)}_\n"
 
                     text_parts.append(f"{extra_values_text}{description}")
 
@@ -510,14 +538,15 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     for color, info in talents_data.items():
         if info['data']:
-            text_parts.append(f"*{info['title']}:*")
+            text_parts.append(f"*{escape_markdown_v2(info['title'])}:*")
             talent_emoji = EMOJI_MAP.get(color, "✨")
             for skill_key, skill_talents in info['data'].items():
                 for talent in skill_talents:
                     description = talent.get('description', '')
                     if description:
                         text_parts.append("")
-                        text_parts.append(f"• {talent_emoji} {escape_html_and_format(description)}")
+                        formatted_desc = format_text_with_emojis(description)
+                        text_parts.append(f"• {talent_emoji} {formatted_desc}")
             text_parts.append("")
 
     message_text = "\n".join(text_parts).strip()
@@ -572,7 +601,6 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     if query.data == "back_to_attributes":
-        # Обновляем клавиатуру, чтобы она включала кнопку "Посмотреть на сайте"
         keyboard = [
             [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
             [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
