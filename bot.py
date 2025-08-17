@@ -136,7 +136,7 @@ SKILL_EMOJI_MAP = {
     "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
     "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
     "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
-    "current": "🌊", "eye": "👁️️", "burrow": " burrow", "sand": "⏳",
+    "current": "🌊", "eye": "👁️", "burrow": " burrow", "sand": "⏳",
     "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
     "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
     "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
@@ -149,7 +149,8 @@ SKILL_EMOJI_MAP = {
     "axes": "🪓", "fervor": "🔥", "trance": "🕺", "remnant": "🔮", "astral": "👻",
     "pulse": "💥", "step": "👟", "blast": "💥", "vampiric": "🩸",
     "strike": "⚔️", "reincarnation": "💀", "arc": "⚡", "bolt": "⚡", "jump": "⚡",
-    "wrath": "⛈️"
+    "wrath": "⛈️",
+    "movespeed": "🥾"  # Добавлено новое значение
 }
 
 # ---------- API ----------
@@ -375,7 +376,14 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     if skill_emoji:
                         formatted_name = f"{skill_emoji} {formatted_name}"
                     
-                    text_parts.append(f"• {formatted_name}: _{escape_html_and_format(description)}_")
+                    description_with_emojis = re.sub(
+                        r'Aghanim Shard', f'{EMOJI_MAP.get("shard")} Aghanim Shard', description
+                    )
+                    description_with_emojis = re.sub(
+                        r'Aghanim Scepter', f'{EMOJI_MAP.get("scepter")} Aghanim Scepter', description_with_emojis
+                    )
+                    
+                    text_parts.append(f"• {formatted_name}: _{escape_html_and_format(description_with_emojis)}_")
                 else:
                     text_parts.append(f"• _{escape_html_and_format(description)}_")
         text_parts.append("")
