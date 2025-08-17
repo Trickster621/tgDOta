@@ -150,6 +150,207 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             "up": "🟢",
             "down": "🔴",
             "change": "🟡",
+            "hero_talent": "🤓",
+        }
+        
+        # Карта эмодзи для способностей
+        SKILL_EMOJI_MAP = {
+            "mist": "☁️",
+            "aphotic": "🛡️",
+            "curse": "💀",
+            "borrowed": "🛡️",
+            "acid": "🧪",
+            "unstable": "💥",
+            "greed": "💰",
+            "chemical": "🧪",
+            "manabreak": "⚡",
+            "antimage_blink": "⚡",
+            "counterspell": "🪄",
+            "manavoid": "💥",
+            "flux": "⚡",
+            "field": "🛡️",
+            "spark": "💥",
+            "double": "👥",
+            "call": "🛡️",
+            "hunger": "🩸",
+            "helix": "🌪️",
+            "culling": "🔪",
+            "enfeeble": "👻",
+            "brain": "🧠",
+            "nightmare": "💤",
+            "grip": "✊",
+            "bloodrage": "🩸",
+            "bloodrite": "🩸",
+            "thirst": "🩸",
+            "rupture": "🩸",
+            "goo": "💦",
+            "spray": "💥",
+            "back": "🛡️",
+            "warpath": "🏃",
+            "stomp": "🦶",
+            "edge": "⚔️",
+            "retaliate": "🛡️",
+            "stampede": "🐎",
+            "crystal": "🧊",
+            "frostbite": "❄️",
+            "arcane": "🪄",
+            "freezing": "❄️",
+            "frost": "❄️",
+            "gust": "💨",
+            "multishot": "🏹",
+            "marksman": "🎯",
+            "chain": "⛓️",
+            "fist": "👊",
+            "guard": "🛡️",
+            "fireremnant": "🔥",
+            "malefice": "🔮",
+            "conversion": "🌑",
+            "midnight": "🌑",
+            "blackhole": "🌌",
+            "acorn": "🌰",
+            "bush": "🐿️",
+            "scurry": "🏃",
+            "sharp": "🎯",
+            "inner_fire": "🔥",
+            "burning_spears": "🔥",
+            "berserkers_blood": "🩸",
+            "life_break": "💔",
+            "quas": "🧊",
+            "wex": "💨",
+            "exort": "🔥",
+            "invoke": "🪄",
+            "blade_fury": "🌪️",
+            "healing_ward": "💚",
+            "blade_dance": "🗡️",
+            "omnislash": "🗡️",
+            "odds": "🛡️",
+            "press": "💚",
+            "moment": "⚔️",
+            "duel": "⚔️",
+            "earth": "🌎",
+            "edict": "💥",
+            "storm": "⚡",
+            "nova": "☄️",
+            "lifestealer_rage": "🩸",
+            "wounds": "🩸",
+            "ghoul": "🧟",
+            "infest": "🦠",
+            "dragon": "🔥",
+            "array": "⚡",
+            "soul": "🔥",
+            "laguna": "⚡",
+            "dispose": "🤾",
+            "rebound": "🤸",
+            "sidekick": "🤜",
+            "unleash": "👊",
+            "spear": "🔱",
+            "rebuke": "🛡️",
+            "bulwark": "🛡️",
+            "arena": "🏟️",
+            "boundless": "🌳",
+            "tree": "🌳",
+            "mastery": "👊",
+            "command": "👑",
+            "wave": "🌊",
+            "adaptive": "🔀",
+            "attribute": "💪",
+            "morph": "💧",
+            "dead": "👻",
+            "calling": "👻",
+            "gun": "🔫",
+            "veil": "👻",
+            "sprout": "🌲",
+            "teleport": " teleport",
+            "nature_call": "🌳",
+            "nature_wrath": "🌲",
+            "fireblast": "🔥",
+            "ignite": "🔥",
+            "bloodlust": "🩸",
+            "multicast": "💥",
+            "buckle": "🛡️",
+            "shield": "🛡️",
+            "lucky": "🎲",
+            "rolling": "🎳",
+            "stifling_dagger": "🔪",
+            "phantom_strike": "👻",
+            "blur": "💨",
+            "coup_de_grace": "🔪",
+            "onslaught": "🐾",
+            "trample": "🐾",
+            "uproar": "🔊",
+            "pulverize": "💥",
+            "orb": "🔮",
+            "rift": "🌌",
+            "shift": "💨",
+            "coil": "🌌",
+            "hook": "⛓️",
+            "rot": "🤢",
+            "flesh": "💪",
+            "dismember": "🔪",
+            "dagger": "🔪",
+            "blink": "⚡",
+            "scream": "🗣️",
+            "sonic": "💥",
+            "plasma": "⚡",
+            "link": "⛓️",
+            "current": "🌊",
+            "eye": "👁️",
+            "burrow": " burrow",
+            "sand": "⏳",
+            "stinger": "🦂",
+            "epicenter": "💥",
+            "shadowraze": "💥",
+            "frenzy": "👻",
+            "dark_lord": "💀",
+            "requiem": "💀",
+            "arcane_bolt": "🔮",
+            "concussive": "💥",
+            "seal": "📜",
+            "flare": " flare",
+            "pact": "👻",
+            "pounce": "🐾",
+            "essence": "👻",
+            "dance": "🕺",
+            "scatter": "🔫",
+            "cookie": "🍪",
+            "shredder": "⚙️",
+            "kisses": "💋",
+            "shrapnel": "💣",
+            "headshot": "🎯",
+            "aim": "🎯",
+            "assassinate": "🔪",
+            "hammer": "🔨",
+            "cleave": "🪓",
+            "cry": "🗣️",
+            "god": "⚔️",
+            "refraction": "🪄",
+            "meld": "🪞",
+            "psiblades": "🗡️",
+            "psionic": "💥",
+            "reflection": "🪞",
+            "illusion": "👻",
+            "meta": "👹",
+            "sunder": "💔",
+            "laser": "💥",
+            "march": "🤖",
+            "matrix": "🛡️",
+            "rearm": "🔄",
+            "rage": "👹",
+            "axes": "🪓",
+            "fervor": "🔥",
+            "trance": "🕺",
+            "remnant": "🔮",
+            "astral": "👻",
+            "pulse": "💥",
+            "step": "👟",
+            "blast": "💥",
+            "vampiric": "🩸",
+            "strike": "⚔️",
+            "reincarnation": "💀",
+            "arc": "⚡",
+            "bolt": "⚡",
+            "jump": "⚡",
+            "wrath": "⛈️"
         }
 
         RU_NAMES = {
@@ -159,7 +360,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             "scepter": "Аганим",
             "innate": "Врожденный талант",
             "shard": "Аганим шард",
-            "hero_talent": "Талант героя",
+            "hero_talent": "Таланты героя",
         }
         
         for hero in heroes:
@@ -174,7 +375,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     change_type = upgrade.get("changeType", "").lower()
                     
                     if ru_rows:
-                        # Получаем эмодзи и русское название
                         item_emoji = EMOJI_MAP.get(item_type.lower(), "")
                         change_emoji = EMOJI_MAP.get(change_type, "")
                         name = RU_NAMES.get(item_type.lower(), "")
@@ -187,10 +387,17 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 for talent in talents:
                     talent_name = talent.get("name", "")
                     
-                    # Заголовок для таланта (например, Laser, Rearm)
-                    text_content += f"\n*{escape_markdown(talent_name.capitalize())}*:\n"
+                    if talent_name == "hero_talent":
+                        name = RU_NAMES.get("hero_talent")
+                        emoji = EMOJI_MAP.get("hero_talent")
+                        text_content += f"\n{emoji} {escape_markdown(name)} {emoji}\n"
+                    else:
+                        skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower(), "")
+                        if skill_emoji:
+                             text_content += f"\n{skill_emoji} *{escape_markdown(talent_name.capitalize())}* {skill_emoji}\n"
+                        else:
+                             text_content += f"\n*{escape_markdown(talent_name.capitalize())}*:\n"
                     
-                    # Проверяем все поля с русским текстом
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
                         change_type = talent.get("changeType", "").lower()
@@ -198,7 +405,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         if ru_rows:
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
                             
-                            # Определяем тип по полю
                             if color == "orangeRuRows":
                                 emoji = EMOJI_MAP.get("orange", "")
                                 name = RU_NAMES.get("orange", "")
@@ -212,7 +418,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                                 name = RU_NAMES.get("blue", "")
                                 text_content += f" {emoji} {escape_markdown(name)} {emoji}\n"
                             
-                            # Добавляем смайлик изменения перед каждой строчкой
                             for line in formatted_rows.split('\n'):
                                 if line.strip():
                                     change_emoji = EMOJI_MAP.get(change_type, "")
@@ -319,6 +524,12 @@ async def previewlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Неизвестная команда. Пожалуйста, используйте кнопки.")
 
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    log_user_message(user, "Получено фото")
+
+    await update.message.reply_text("Я получил ваше фото. К сожалению, я не могу проанализировать его содержимое.")
+
 def main():
     if TOKEN == "ВАШ_ТОКЕН_ТЕЛЕГРАМ":
         logger.critical("!!! TOKEN не установлен. Замените 'ВАШ_ТОКЕН_ТЕЛЕГРАМ' в коде или установите переменную окружения BOT_TOKEN.")
@@ -337,6 +548,7 @@ def main():
     app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(conv)
     app.add_handler(MessageHandler(filters.Regex("^Обновления$"), handle_updates_button))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_text))
 
     logger.info("Бот запущен...")
