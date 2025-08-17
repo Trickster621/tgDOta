@@ -346,70 +346,80 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
-    # Создаем копии списков, чтобы изменять их
-    changes = list(hero_json.get('changes', []))
-    upgrades = list(hero_json.get('upgrades', []))
-
-    # Перемещаем "innate" из изменений в улучшения
-    found_innate_change = None
-    for change in changes:
-        if change.get('name') == "innate":
-            found_innate_change = change
-            break
+    # Разделяем changes на две группы: "innate" и остальные
+    processed_changes = []
+    processed_upgrades = []
     
-    if found_innate_change:
-        # Создаем новый элемент для раздела "Улучшения"
-        innate_upgrade = {
-            "upgradeType": "innate",
-            "description": found_innate_change.get("description", ""),
-            "extraValues": found_innate_change.get("extraValues", [])
-        }
-        
-        # Удаляем его из списка изменений
-        changes.remove(found_innate_change)
-        
-        # Добавляем в список улучшений
-        upgrades.insert(0, innate_upgrade)  # Добавляем в начало, чтобы "Врожденная способность" была первой
+    # Сначала обрабатываем изменения из 'changes'
+    for change in hero_json.get('changes', []):
+        if change.get('name') == "innate" or change.get('upgradeType') == 'innate':
+            # Это врожденная способность, добавляем в upgrades
+            processed_upgrades.append({
+                "upgradeType": "innate",
+                "description": change.get("description", ""),
+                "extraValues": change.get("extraValues", [])
+            })
+        else:
+            # Все остальные изменения - это отличия от Доты
+            processed_changes.append(change)
+
+    # Затем добавляем остальные улучшения из 'upgrades'
+    for upgrade in hero_json.get('upgrades', []):
+        processed_upgrades.append(upgrade)
 
     # 1. Отличия от Dota (Changes)
-    if changes:
+    if processed_changes:
         text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
-        for change in changes:
+        for change in processed_changes:
             text_parts.append(f"• _{escape_html_and_format(change.get('description', ''))}_")
         text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
-    if upgrades:
+    if processed_upgrades:
         text_parts.append("*Улучшения:*")
-        for upgrade in upgrades:
+        
+        # Группируем улучшения по типу
+        grouped_upgrades = {}
+        for upgrade in processed_upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
+            if upgrade_type not in grouped_upgrades:
+                grouped_upgrades[upgrade_type] = []
+            grouped_upgrades[upgrade_type].append(upgrade)
             
-            upgrade_title = "Неизвестное улучшение"
-            if upgrade_type == 'scepter':
-                upgrade_title = "Аганим"
-            elif upgrade_type == 'shard':
-                upgrade_title = "Аганим Шард"
-            elif upgrade_type == 'innate':
-                upgrade_title = "Врожденная способность 🔥" # Добавил смайлик
-            
-            emoji = EMOJI_MAP.get(upgrade_type, "✨")
-            
-            # Обработка extraValues для каждого улучшения
-            extra_values_text = ""
-            for extra_value_pair in upgrade.get('extraValues', []):
-                key = extra_value_pair[0]
-                value = extra_value_pair[1]
-                extra_values_text += f"_{escape_html_and_format(key)}: {escape_html_and_format(value)}_\n"
-            
-            description = escape_html_and_format(upgrade.get('description', ''))
-            
-            # Для "innate" выводим только описание без заголовка
-            if upgrade_type == 'innate':
-                upgrade_text = f"• {escape_markdown(upgrade_title)} {description}"
-            else:
-                upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
-            
-            text_parts.append(upgrade_text.strip())
+        # Определяем порядок вывода
+        upgrade_order = ['innate', 'scepter', 'shard']
+        
+        for upgrade_type in upgrade_order:
+            if upgrade_type in grouped_upgrades:
+                upgrades_to_print = grouped_upgrades[upgrade_type]
+                
+                # Выводим заголовок для группы, если она содержит несколько элементов
+                # или если это не 'innate'
+                is_innate = upgrade_type == 'innate'
+                title_printed = False
+                
+                for upgrade in upgrades_to_print:
+                    upgrade_title = "Неизвестное улучшение"
+                    if upgrade_type == 'scepter':
+                        upgrade_title = "Аганим"
+                    elif upgrade_type == 'shard':
+                        upgrade_title = "Аганим Шард"
+                    elif upgrade_type == 'innate':
+                        upgrade_title = "Врожденная способность"
+                    
+                    emoji = EMOJI_MAP.get(upgrade_type, "✨")
+                    
+                    description = escape_html_and_format(upgrade.get('description', ''))
+                    
+                    # Отделяем заголовок от описания
+                    if not is_innate or not title_printed:
+                         upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{description}"
+                         title_printed = True
+                    else:
+                         upgrade_text = f"• {emoji} {description}"
+
+                    text_parts.append(upgrade_text.strip())
+        
         text_parts.append("")
 
     # 3. Таланты (Talents)
