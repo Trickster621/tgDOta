@@ -346,80 +346,62 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
-    # Разделяем changes на две группы: "innate" и остальные
-    processed_changes = []
-    processed_upgrades = []
-    
-    # Сначала обрабатываем изменения из 'changes'
-    for change in hero_json.get('changes', []):
-        if change.get('name') == "innate" or change.get('upgradeType') == 'innate':
-            # Это врожденная способность, добавляем в upgrades
-            processed_upgrades.append({
-                "upgradeType": "innate",
-                "description": change.get("description", ""),
-                "extraValues": change.get("extraValues", [])
-            })
-        else:
-            # Все остальные изменения - это отличия от Доты
-            processed_changes.append(change)
-
-    # Затем добавляем остальные улучшения из 'upgrades'
-    for upgrade in hero_json.get('upgrades', []):
-        processed_upgrades.append(upgrade)
+    changes = hero_json.get('changes', [])
+    upgrades = hero_json.get('upgrades', [])
 
     # 1. Отличия от Dota (Changes)
-    if processed_changes:
+    if changes:
         text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
-        for change in processed_changes:
-            text_parts.append(f"• _{escape_html_and_format(change.get('description', ''))}_")
+        for change in changes:
+            name = change.get('name')
+            description = change.get('description', '')
+            
+            # Если это innate, выводим его как отдельный элемент
+            if name == 'innate':
+                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown('Врожденная способность:')}*")
+                text_parts.append(f"_{escape_html_and_format(description)}_")
+            else:
+                # Добавляем название способности, если оно есть
+                if name:
+                    skill_name = SKILL_EMOJI_MAP.get(name.lower(), "")
+                    description = f"({escape_markdown(name.capitalize())}) {escape_html_and_format(description)}"
+                    
+                text_parts.append(f"• {escape_html_and_format(description)}")
         text_parts.append("")
     
-    # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
-    if processed_upgrades:
+    # 2. Улучшения (Upgrades: Aghanim, Shard)
+    if upgrades:
         text_parts.append("*Улучшения:*")
         
         # Группируем улучшения по типу
         grouped_upgrades = {}
-        for upgrade in processed_upgrades:
+        for upgrade in upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
             if upgrade_type not in grouped_upgrades:
                 grouped_upgrades[upgrade_type] = []
             grouped_upgrades[upgrade_type].append(upgrade)
             
         # Определяем порядок вывода
-        upgrade_order = ['innate', 'scepter', 'shard']
+        upgrade_order = ['scepter', 'shard']
         
         for upgrade_type in upgrade_order:
             if upgrade_type in grouped_upgrades:
                 upgrades_to_print = grouped_upgrades[upgrade_type]
                 
-                # Выводим заголовок для группы, если она содержит несколько элементов
-                # или если это не 'innate'
-                is_innate = upgrade_type == 'innate'
-                title_printed = False
+                # Выводим заголовок для группы
+                upgrade_title = "Неизвестное улучшение"
+                if upgrade_type == 'scepter':
+                    upgrade_title = "Аганим"
+                elif upgrade_type == 'shard':
+                    upgrade_title = "Аганим Шард"
+                
+                emoji = EMOJI_MAP.get(upgrade_type, "✨")
+                text_parts.append(f"• {emoji} *{escape_markdown(upgrade_title)}:*")
                 
                 for upgrade in upgrades_to_print:
-                    upgrade_title = "Неизвестное улучшение"
-                    if upgrade_type == 'scepter':
-                        upgrade_title = "Аганим"
-                    elif upgrade_type == 'shard':
-                        upgrade_title = "Аганим Шард"
-                    elif upgrade_type == 'innate':
-                        upgrade_title = "Врожденная способность"
-                    
-                    emoji = EMOJI_MAP.get(upgrade_type, "✨")
-                    
                     description = escape_html_and_format(upgrade.get('description', ''))
-                    
-                    # Отделяем заголовок от описания
-                    if not is_innate or not title_printed:
-                         upgrade_text = f"• {emoji} *{escape_markdown(upgrade_title)}:*\n{description}"
-                         title_printed = True
-                    else:
-                         upgrade_text = f"• {emoji} {description}"
+                    text_parts.append(f"{description}")
 
-                    text_parts.append(upgrade_text.strip())
-        
         text_parts.append("")
 
     # 3. Таланты (Talents)
