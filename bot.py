@@ -3,6 +3,7 @@ import os
 import re
 import asyncio
 import aiohttp
+import aiofiles
 from urllib.parse import urljoin
 from datetime import datetime
 from collections import deque
@@ -53,15 +54,15 @@ if not os.path.exists(USER_LOG_FILE):
 
 RECENT_MESSAGES = deque(maxlen=3000)
 
-def log_user_message(user, text):
+async def log_user_message(user, text):
     try:
         log_line = (
             f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | ID:{getattr(user, 'id', None)} | "
             f"Имя:{getattr(user, 'first_name', None)} | "
             f"Username:@{getattr(user, 'username', None)} | {text}\n"
         )
-        with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(log_line)
+        async with aiofiles.open(USER_LOG_FILE, "a", encoding="utf-8") as f:
+            await f.write(log_line)
         RECENT_MESSAGES.append(log_line)
     except Exception:
         logger.exception("Не удалось записать лог пользователя")
@@ -222,7 +223,7 @@ async def fetch_json(url):
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    log_user_message(user, "/start")
+    await log_user_message(user, "/start")
     keyboard = [
         ["Проверить статистику", "Обновления"],
         ["Герои", "Ладдер"]
@@ -231,17 +232,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
 async def start_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    log_user_message(update.effective_user, "Нажал 'Проверить статистику'")
+    await log_user_message(update.effective_user, "Нажал 'Проверить статистику'")
     await update.message.reply_text("Введите числовой Dota ID:")
     return GET_DOTA_ID
 
 async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dota_id = update.message.text
-    log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
+    await log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
 
     player_data_url = f"{API_PLAYERS_URL}?playerId={dota_id}"
-    player_data = await fetch_json(player_data_url)
+    steam_profile_url = f"{API_STEAM_PROFILE_URL}?playerId={dota_id}"
     
+    player_data, steam_profile_data = await asyncio.gather(
+        fetch_json(player_data_url),
+        fetch_json(steam_profile_url)
+    )
+
     if not player_data or not player_data.get("data"):
         await update.message.reply_text("Игрок с таким ID не найден или произошла ошибка API.")
         return ConversationHandler.END
@@ -252,7 +258,6 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_places = player_info.get("firstPlaces", "неизвестно")
     rating = player_info.get("rating", "неизвестно")
     
-    # ИСПРАВЛЕНО: Проверяем, что social_data - словарь, иначе используем пустой.
     social_data = player_info.get("social", {})
     if social_data is None:
         social_data = {}
@@ -262,24 +267,20 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_youtube_live = social_data.get("isYoutubeLive")
     is_twitch_live = social_data.get("isTwitchLive")
 
-    # ДОБАВЛЕНО: Получение имени игрока из Steam API
-    steam_profile_url = f"{API_STEAM_PROFILE_URL}?playerId={dota_id}"
-    steam_profile_data = await fetch_json(steam_profile_url)
-    
     player_name = None
     if steam_profile_data and steam_profile_data.get("data"):
         player_name = steam_profile_data.get("data").get("personaname")
 
     if player_name:
-        header = f"*Статистика игрока {player_name}*"
+        header = f"*Статистика игрока {escape_markdown_v2(player_name)}*"
     else:
         header = "*Статистика игрока*"
 
     msg = f"{header}\n"
-    msg += f"Всего игр: {match_count}\n"
-    msg += f"Среднее место: {avg_place}\n"
-    msg += f"Первых мест: {first_places}\n"
-    msg += f"Рейтинг: {rating}\n\n"
+    msg += f"Всего игр: {escape_markdown_v2(str(match_count))}\n"
+    msg += f"Среднее место: {escape_markdown_v2(str(avg_place))}\n"
+    msg += f"Первых мест: {escape_markdown_v2(str(first_places))}\n"
+    msg += f"Рейтинг: {escape_markdown_v2(str(rating))}\n\n"
 
     msg_social = ""
     if youtube_url:
@@ -289,7 +290,7 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
         msg_social += f"Twitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
         
-    final_msg = escape_markdown_v2(msg)
+    final_msg = msg
     if msg_social:
         final_msg += f"*{escape_markdown_v2('Социальные сети')}*\n{msg_social}"
 
@@ -312,7 +313,7 @@ async def cancel_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    log_user_message(user, "Обновления")
+    await log_user_message(user, "Обновления")
     await update.message.reply_text("🔎 Ищу последнее обновление...")
 
     latest_update_info = await fetch_json(API_UPDATES_URL)
@@ -416,7 +417,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    log_user_message(user, "Ладдер")
+    await log_user_message(user, "Ладдер")
 
     sent_message = await update.message.reply_text("🏆 Загружаю ладдер...")
     
@@ -437,7 +438,6 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         rating = player.get("rating")
         match_count = player.get("matchCount")
         
-        # ИСПРАВЛЕНО: Проверяем, что social_data - словарь, иначе используем пустой.
         social_data = player.get("social", {})
         if social_data is None:
             social_data = {}
@@ -448,9 +448,9 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
         is_twitch_live = social_data.get("isTwitchLive")
 
         player_info = (
-            f"*{place}\\. {escape_markdown_v2(nickname)}*\n"
-            f"Рейтинг: {rating}\n"
-            f"Игр: {match_count}\n"
+            f"*{escape_markdown_v2(str(place))}\\. {escape_markdown_v2(nickname)}*\n"
+            f"Рейтинг: {escape_markdown_v2(str(rating))}\n"
+            f"Игр: {escape_markdown_v2(str(match_count))}\n"
         )
         
         if youtube_url or twitch_url:
@@ -463,7 +463,6 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
                 twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
                 social_links.append(f"{twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})")
             
-            # ИСПРАВЛЕНО: Экранирование символа "|"
             player_info += escape_markdown_v2(" | ").join(social_links)
             player_info += "\n"
 
@@ -480,7 +479,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    log_user_message(user, "Герои")
+    await log_user_message(user, "Герои")
 
     keyboard = [
         [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
@@ -738,7 +737,7 @@ async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_long_message(context, update.effective_chat.id, f"Весь лог из памяти:\n```\n{log_text}\n```")
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    log_user_message(update.effective_user, update.message.text)
+    await log_user_message(update.effective_user, update.message.text)
     await update.message.reply_text("Простите, я не понял эту команду. Пожалуйста, используйте кнопки.")
 
 
