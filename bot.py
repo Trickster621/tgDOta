@@ -5,6 +5,7 @@ import asyncio
 import aiohttp
 from urllib.parse import urljoin
 from datetime import datetime
+from collections import deque
 
 from telegram import (
     Update,
@@ -610,6 +611,48 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+# ---------- НОВЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ----------
+async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет последние 20 строк файла логов."""
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("У вас нет прав для выполнения этой команды.")
+        return
+
+    try:
+        if not os.path.exists(USER_LOG_FILE):
+            await update.message.reply_text("Файл логов не найден.")
+            return
+
+        with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
+            lines = deque(f, 20)
+        
+        log_text = "".join(lines)
+        if log_text:
+            await update.message.reply_text(f"Последние 20 строк лога:\n```\n{log_text}\n```", parse_mode='MarkdownV2')
+        else:
+            await update.message.reply_text("Файл логов пуст.")
+    except Exception as e:
+        logger.error(f"Ошибка при чтении лога: {e}")
+        await update.message.reply_text(f"Произошла ошибка при чтении лога: {e}")
+
+async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет полный файл логов как документ."""
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("У вас нет прав для выполнения этой команды.")
+        return
+
+    try:
+        if not os.path.exists(USER_LOG_FILE):
+            await update.message.reply_text("Файл логов не найден.")
+            return
+
+        await update.message.reply_document(open(USER_LOG_FILE, 'rb'))
+    except Exception as e:
+        logger.error(f"Ошибка при отправке лога: {e}")
+        await update.message.reply_text(f"Произошла ошибка при отправке лога: {e}")
+
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(update.effective_user, update.message.text)
     await update.message.reply_text("Простите, я не понял эту команду. Пожалуйста, используйте кнопки.")
@@ -629,6 +672,11 @@ def main():
     application.add_handler(dota_stats_conv_handler)
 
     application.add_handler(CommandHandler("start", start))
+    
+    # Регистрация новых команд для логирования
+    application.add_handler(CommandHandler("previewlog", preview_log))
+    application.add_handler(CommandHandler("getlog", get_log))
+
     application.add_handler(MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     
