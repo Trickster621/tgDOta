@@ -284,10 +284,12 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName")):
         hero_id = hero.get("heroId")
         name = hero.get("userFriendlyName")
-        row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_id}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
+        # Проверяем, что hero_id существует
+        if hero_id:
+            row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_id}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
     if row:
         keyboard.append(row)
     
@@ -303,8 +305,16 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    hero_id = query.data.split("_")[1]
-    
+    try:
+        hero_id = query.data.split("_")[1]
+        # Дополнительная проверка на пустой или некорректный ID
+        if not hero_id or hero_id == "None":
+            await query.message.reply_text("Не удалось получить ID героя. Пожалуйста, попробуйте выбрать героя еще раз.")
+            return
+    except (IndexError, ValueError):
+        await query.message.reply_text("Произошла ошибка при обработке данных. Пожалуйста, сообщите об этом разработчику.")
+        return
+
     hero_data = await fetch_json(f"{API_HEROES_URL}{hero_id}")
     if not hero_data:
         await query.edit_message_text("Не удалось получить данные о герое. Попробуйте позже.")
@@ -338,13 +348,15 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
                         parse_mode='MarkdownV2'
                     )
                 else:
-                    await query.edit_message_text(
+                    await context.bot.send_message(
+                        chat_id=query.message.chat_id,
                         text=message_text,
                         parse_mode='MarkdownV2'
                     )
     except Exception as e:
         logger.error(f"Failed to send photo: {e}")
-        await query.edit_message_text(
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
             text=message_text,
             parse_mode='MarkdownV2'
         )
@@ -354,7 +366,12 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
-    await query.message.reply_text("Что еще?", reply_markup=markup)
+    # Отправляем новое сообщение с кнопкой "Назад", чтобы не было ошибки при изменении
+    await context.bot.send_message(
+        chat_id=query.message.chat_id, 
+        text="Что еще?", 
+        reply_markup=markup
+    )
 
 async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
