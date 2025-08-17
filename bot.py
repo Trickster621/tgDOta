@@ -27,7 +27,7 @@ from telegram.ext import (
 
 # ---------- НАСТРОЙКИ ----------
 TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
+OWNER_ID = 741409144
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
@@ -276,6 +276,7 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     context.user_data['selected_attribute'] = attribute
     
     heroes_data = await fetch_json(API_HEROES_URL)
+    
     if not heroes_data:
         await query.message.reply_text("Не удалось получить список героев.")
         return
@@ -284,7 +285,6 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     
     filtered_heroes = [h for h in heroes if h.get("attribute") == attribute or attribute == "All"]
     
-    # === НОВОЕ ИЗМЕНЕНИЕ: ПРОВЕРКА НА ПУСТОЙ СПИСОК ГЕРОЕВ ===
     if not filtered_heroes:
         await query.edit_message_text(
             text="К сожалению, героев этого атрибута не найдено. Попробуйте выбрать другой.",
@@ -293,15 +293,15 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
             ])
         )
         return
-    # ==========================================================
 
     keyboard = []
     row = []
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName")):
-        hero_id = hero.get("heroId")
+        # === НОВОЕ ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ userFriendlyName ДЛЯ ИМЕНИ ГЕРОЯ В КНОПКЕ ===
         name = hero.get("userFriendlyName")
-        if hero_id:
-            row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_id}"))
+        
+        if name:
+            row.append(InlineKeyboardButton(name, callback_data=f"hero_name_{name}"))
             if len(row) == 2:
                 keyboard.append(row)
                 row = []
@@ -321,15 +321,37 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     
     try:
-        hero_id = query.data.split("_")[1]
-        if not hero_id or hero_id == "None":
-            await query.message.reply_text("Не удалось получить ID героя. Пожалуйста, попробуйте выбрать героя еще раз.")
+        # === НОВОЕ ИЗМЕНЕНИЕ: ПОЛУЧАЕМ userFriendlyName ИЗ КНОПКИ ===
+        hero_friendly_name = query.data.split("_", 2)[2]
+        if not hero_friendly_name:
+            await query.message.reply_text("Не удалось получить имя героя. Пожалуйста, попробуйте выбрать героя еще раз.")
             return
     except (IndexError, ValueError):
         await query.message.reply_text("Произошла ошибка при обработке данных. Пожалуйста, сообщите об этом разработчику.")
         return
+    
+    # === НОВОЕ ИЗМЕНЕНИЕ: НАХОДИМ urlName ПО userFriendlyName ===
+    heroes_data = await fetch_json(API_HEROES_URL)
+    if not heroes_data:
+        await query.edit_message_text("Не удалось получить список героев для поиска.")
+        return
+    
+    heroes = heroes_data.get("data", {}).get("heroes", [])
+    selected_hero_data = next((h for h in heroes if h.get("userFriendlyName") == hero_friendly_name), None)
 
-    hero_data = await fetch_json(f"{API_HEROES_URL}{hero_id}")
+    if not selected_hero_data:
+        await query.edit_message_text(f"Герой '{hero_friendly_name}' не найден в базе данных.")
+        return
+
+    hero_url_name = selected_hero_data.get("urlName")
+    
+    if not hero_url_name:
+        await query.edit_message_text(f"Для героя '{hero_friendly_name}' не найден URL-идентификатор.")
+        return
+        
+    # === НОВОЕ ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ urlName В ЗАПРОСЕ ===
+    hero_data = await fetch_json(f"{API_HEROES_URL}{hero_url_name}")
+    
     if not hero_data:
         await query.edit_message_text("Не удалось получить данные о герое. Попробуйте позже.")
         return
@@ -414,7 +436,7 @@ def main():
     application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     
     application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r'^attribute_'))
-    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_'))
+    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
     application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_'))
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
