@@ -1,4 +1,4 @@
-# bot.py — финальная интегрированная версия с requests-html
+# bot.py — финальная интегрированная версия без requests-html
 import logging
 import os
 from io import BytesIO
@@ -8,7 +8,6 @@ from datetime import datetime
 import requests
 import cloudscraper
 from bs4 import BeautifulSoup
-from requests_html import AsyncHTMLSession
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -90,27 +89,18 @@ def get_latest_update_info_from_api():
         logger.exception("Error fetching or parsing latest update from API")
         return None
 
-# ---------- Requests-HTML Web scraping ----------
-async def get_page_content_with_requests_html(url):
+# ---------- Web scraping with Cloudscraper ----------
+def get_page_content_with_cloudscraper(url):
     """
-    Получает полный HTML-контент страницы после выполнения JavaScript.
+    Получает HTML-контент страницы, используя Cloudscraper для обхода Cloudflare.
     """
-    session = AsyncHTMLSession()
     try:
-        logger.info(f"Начинаю рендеринг страницы: {url}")
-        r = await session.get(url, timeout=20)
-        await r.html.arender(timeout=20, sleep=1)
-        
-        content = r.html.html
-        logger.info("Страница успешно загружена, возвращаю контент.")
-        return content
-    
+        r = scraper.get(url, timeout=20)
+        r.raise_for_status()
+        return r.text
     except Exception as e:
-        logger.error(f"Ошибка requests-html: {e}")
+        logger.error(f"Ошибка Cloudscraper: {e}")
         return None
-    
-    finally:
-        await session.close()
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,8 +128,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     
-    # ИСПОЛЬЗУЕМ requests-html для получения HTML
-    page_content = await get_page_content_with_requests_html(update_url)
+    # ИСПОЛЬЗУЕМ CLOUDSCRAPER для получения HTML
+    page_content = get_page_content_with_cloudscraper(update_url)
     
     if not page_content:
         await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
