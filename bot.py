@@ -23,6 +23,7 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
     filters,
+    CallbackQueryHandler,
 )
 
 # ---------- НАСТРОЙКИ ----------
@@ -30,8 +31,9 @@ TOKEN = os.environ.get("BOT_TOKEN") or "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
 OWNER_ID = 741409144  # Замените на ваш Telegram ID, если нужно
 USER_LOG_FILE = "user_messages.txt"
 BASE_URL = "https://dota1x6.com"
-# URL к API для получения информации об обновлений
 API_UPDATES_URL = "https://stats.dota1x6.com/api/v2/updates/?page=1&count=20"
+API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
+CDN_HEROES_URL = "https://cdn.dota1x6.com/shared/"
 
 # ---------- ЛОГИ ----------
 logging.basicConfig(
@@ -62,50 +64,50 @@ def escape_markdown(text):
     if not isinstance(text, str):
         return ""
     
-    # Символы, которые нужно экранировать в Markdown V2
-    # _, *, [, ], (, ), ~, `, >, #, +, -, =, |, {, }, ., !
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(escape_chars, r'\\\g<0>', text)
-
 
 # ---------- Conversation states ----------
 WAITING_FOR_DOTA_ID = 1
 
 # ---------- API ----------
 def get_latest_update_info_from_api():
-    """
-    Получает информацию о последнем обновлении с API.
-    Возвращает словарь с данными или None в случае ошибки.
-    """
+    """Получает информацию о последнем обновлении с API."""
     try:
         r = requests.get(API_UPDATES_URL, timeout=10)
         r.raise_for_status()
-        
         data = r.json().get("data")
         if not data:
-            logger.warning("API returned no data key")
             return None
-
         updates_list = data.get("values")
-        
         if not updates_list or not isinstance(updates_list, list) or len(updates_list) == 0:
-            logger.warning("API returned empty updates list")
             return None
-            
         return updates_list[0]
-            
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"API request failed with status code {e.response.status_code}")
-        return None
     except Exception:
         logger.exception("Error fetching or parsing latest update from API")
+        return None
+
+def get_heroes_from_api():
+    """Получает список всех героев с API."""
+    try:
+        r = requests.get(API_HEROES_URL, timeout=10)
+        r.raise_for_status()
+        data = r.json().get("data")
+        if not data:
+            return None
+        return data.get("heroes", [])
+    except Exception:
+        logger.exception("Error fetching heroes from API")
         return None
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "/start")
-    keyboard = [["Проверить статистику", "Обновления"]]
+    keyboard = [
+        ["Проверить статистику", "Обновления"],
+        ["Герои"]
+    ]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
@@ -134,232 +136,69 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         response.raise_for_status()
         api_data = response.json()
         
-        # Извлекаем данные из JSON
         title = api_data.get("data", {}).get("ruName", "Без названия")
         text_content = ""
         heroes = api_data.get("data", {}).get("heroes", [])
         
-        # Создаем карты для эмодзи и названий
         EMOJI_MAP = {
-            "purple": "🟪",
-            "blue": "🟦",
-            "orange": "🟧",
-            "scepter": "🔮",
-            "innate": "🔥",
-            "shard": "🔷",
-            "up": "🟢",
-            "down": "🔴",
-            "change": "🟡",
-            "hero_talent": "🤓",
+            "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
+            "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
+            "change": "🟡", "hero_talent": "🤓",
         }
-        
-        # Карта эмодзи для способностей
         SKILL_EMOJI_MAP = {
-            "mist": "☁️",
-            "aphotic": "🛡️",
-            "curse": "💀",
-            "borrowed": "🛡️",
-            "acid": "🧪",
-            "unstable": "💥",
-            "greed": "💰",
-            "chemical": "🧪",
-            "manabreak": "⚡",
-            "antimage_blink": "⚡",
-            "counterspell": "🪄",
-            "manavoid": "💥",
-            "flux": "⚡",
-            "field": "🛡️",
-            "spark": "💥",
-            "double": "👥",
-            "call": "🛡️",
-            "hunger": "🩸",
-            "helix": "🌪️",
-            "culling": "🔪",
-            "enfeeble": "👻",
-            "brain": "🧠",
-            "nightmare": "💤",
-            "grip": "✊",
-            "bloodrage": "🩸",
-            "bloodrite": "🩸",
-            "thirst": "🩸",
-            "rupture": "🩸",
-            "goo": "💦",
-            "spray": "💥",
-            "back": "🛡️",
-            "warpath": "🏃",
-            "stomp": "🦶",
-            "edge": "⚔️",
-            "retaliate": "🛡️",
-            "stampede": "🐎",
-            "crystal": "🧊",
-            "frostbite": "❄️",
-            "arcane": "🪄",
-            "freezing": "❄️",
-            "frost": "❄️",
-            "gust": "💨",
-            "multishot": "🏹",
-            "marksman": "🎯",
-            "chain": "⛓️",
-            "fist": "👊",
-            "guard": "🛡️",
-            "fireremnant": "🔥",
-            "malefice": "🔮",
-            "conversion": "🌑",
-            "midnight": "🌑",
-            "blackhole": "🌌",
-            "acorn": "🌰",
-            "bush": "🐿️",
-            "scurry": "🏃",
-            "sharp": "🎯",
-            "inner_fire": "🔥",
-            "burning_spears": "🔥",
-            "berserkers_blood": "🩸",
-            "life_break": "💔",
-            "quas": "🧊",
-            "wex": "💨",
-            "exort": "🔥",
-            "invoke": "🪄",
-            "blade_fury": "🌪️",
-            "healing_ward": "💚",
-            "blade_dance": "🗡️",
-            "omnislash": "🗡️",
-            "odds": "🛡️",
-            "press": "💚",
-            "moment": "⚔️",
-            "duel": "⚔️",
-            "earth": "🌎",
-            "edict": "💥",
-            "storm": "⚡",
-            "nova": "☄️",
-            "lifestealer_rage": "🩸",
-            "wounds": "🩸",
-            "ghoul": "🧟",
-            "infest": "🦠",
-            "dragon": "🔥",
-            "array": "⚡",
-            "soul": "🔥",
-            "laguna": "⚡",
-            "dispose": "🤾",
-            "rebound": "🤸",
-            "sidekick": "🤜",
-            "unleash": "👊",
-            "spear": "🔱",
-            "rebuke": "🛡️",
-            "bulwark": "🛡️",
-            "arena": "🏟️",
-            "boundless": "🌳",
-            "tree": "🌳",
-            "mastery": "👊",
-            "command": "👑",
-            "wave": "🌊",
-            "adaptive": "🔀",
-            "attribute": "💪",
-            "morph": "💧",
-            "dead": "👻",
-            "calling": "👻",
-            "gun": "🔫",
-            "veil": "👻",
-            "sprout": "🌲",
-            "teleport": " teleport",
-            "nature_call": "🌳",
-            "nature_wrath": "🌲",
-            "fireblast": "🔥",
-            "ignite": "🔥",
-            "bloodlust": "🩸",
-            "multicast": "💥",
-            "buckle": "🛡️",
-            "shield": "🛡️",
-            "lucky": "🎲",
-            "rolling": "🎳",
-            "stifling_dagger": "🔪",
-            "phantom_strike": "👻",
-            "blur": "💨",
-            "coup_de_grace": "🔪",
-            "onslaught": "🐾",
-            "trample": "🐾",
-            "uproar": "🔊",
-            "pulverize": "💥",
-            "orb": "🔮",
-            "rift": "🌌",
-            "shift": "💨",
-            "coil": "🌌",
-            "hook": "⛓️",
-            "rot": "🤢",
-            "flesh": "💪",
-            "dismember": "🔪",
-            "dagger": "🔪",
-            "blink": "⚡",
-            "scream": "🗣️",
-            "sonic": "💥",
-            "plasma": "⚡",
-            "link": "⛓️",
-            "current": "🌊",
-            "eye": "👁️",
-            "burrow": " burrow",
-            "sand": "⏳",
-            "stinger": "🦂",
-            "epicenter": "💥",
-            "shadowraze": "💥",
-            "frenzy": "👻",
-            "dark_lord": "💀",
-            "requiem": "💀",
-            "arcane_bolt": "🔮",
-            "concussive": "💥",
-            "seal": "📜",
-            "flare": " flare",
-            "pact": "👻",
-            "pounce": "🐾",
-            "essence": "👻",
-            "dance": "🕺",
-            "scatter": "🔫",
-            "cookie": "🍪",
-            "shredder": "⚙️",
-            "kisses": "💋",
-            "shrapnel": "💣",
-            "headshot": "🎯",
-            "aim": "🎯",
-            "assassinate": "🔪",
-            "hammer": "🔨",
-            "cleave": "🪓",
-            "cry": "🗣️",
-            "god": "⚔️",
-            "refraction": "🪄",
-            "meld": "🪞",
-            "psiblades": "🗡️",
-            "psionic": "💥",
-            "reflection": "🪞",
-            "illusion": "👻",
-            "meta": "👹",
-            "sunder": "💔",
-            "laser": "💥",
-            "march": "🤖",
-            "matrix": "🛡️",
-            "rearm": "🔄",
-            "rage": "👹",
-            "axes": "🪓",
-            "fervor": "🔥",
-            "trance": "🕺",
-            "remnant": "🔮",
-            "astral": "👻",
-            "pulse": "💥",
-            "step": "👟",
-            "blast": "💥",
-            "vampiric": "🩸",
-            "strike": "⚔️",
-            "reincarnation": "💀",
-            "arc": "⚡",
-            "bolt": "⚡",
-            "jump": "⚡",
+            "mist": "☁️", "aphotic": "🛡️", "curse": "💀", "borrowed": "🛡️",
+            "acid": "🧪", "unstable": "💥", "greed": "💰", "chemical": "🧪",
+            "manabreak": "⚡", "antimage_blink": "⚡", "counterspell": "🪄",
+            "manavoid": "💥", "flux": "⚡", "field": "🛡️", "spark": "💥",
+            "double": "👥", "call": "🛡️", "hunger": "🩸", "helix": "🌪️",
+            "culling": "🔪", "enfeeble": "👻", "brain": "🧠", "nightmare": "💤",
+            "grip": "✊", "bloodrage": "🩸", "bloodrite": "🩸", "thirst": "🩸",
+            "rupture": "🩸", "goo": "💦", "spray": "💥", "back": "🛡️",
+            "warpath": "🏃", "stomp": "🦶", "edge": "⚔️", "retaliate": "🛡️",
+            "stampede": "🐎", "crystal": "🧊", "frostbite": "❄️", "arcane": "🪄",
+            "freezing": "❄️", "frost": "❄️", "gust": "💨", "multishot": "🏹",
+            "marksman": "🎯", "chain": "⛓️", "fist": "👊", "guard": "🛡️",
+            "fireremnant": "🔥", "malefice": "🔮", "conversion": "🌑",
+            "midnight": "🌑", "blackhole": "🌌", "acorn": "🌰", "bush": "🐿️",
+            "scurry": "🏃", "sharp": "🎯", "inner_fire": "🔥", "burning_spears": "🔥",
+            "berserkers_blood": "🩸", "life_break": "💔", "quas": "🧊", "wex": "💨",
+            "exort": "🔥", "invoke": "🪄", "blade_fury": "🌪️", "healing_ward": "💚",
+            "blade_dance": "🗡️", "omnislash": "🗡️", "odds": "🛡️", "press": "💚",
+            "moment": "⚔️", "duel": "⚔️", "earth": "🌎", "edict": "💥", "storm": "⚡",
+            "nova": "☄️", "lifestealer_rage": "🩸", "wounds": "🩸", "ghoul": "🧟",
+            "infest": "🦠", "dragon": "🔥", "array": "⚡", "soul": "🔥", "laguna": "⚡",
+            "dispose": "🤾", "rebound": "🤸", "sidekick": "🤜", "unleash": "👊",
+            "spear": "🔱", "rebuke": "🛡️", "bulwark": "🛡️", "arena": "🏟️",
+            "boundless": "🌳", "tree": "🌳", "mastery": "👊", "command": "👑",
+            "wave": "🌊", "adaptive": "🔀", "attribute": "💪", "morph": "💧",
+            "dead": "👻", "calling": "👻", "gun": "🔫", "veil": "👻", "sprout": "🌲",
+            "teleport": " teleport", "nature_call": "🌳", "nature_wrath": "🌲",
+            "fireblast": "🔥", "ignite": "🔥", "bloodlust": "🩸", "multicast": "💥",
+            "buckle": "🛡️", "shield": "🛡️", "lucky": "🎲", "rolling": "🎳",
+            "stifling_dagger": "🔪", "phantom_strike": "👻", "blur": "💨",
+            "coup_de_grace": "🔪", "onslaught": "🐾", "trample": "🐾", "uproar": "🔊",
+            "pulverize": "💥", "orb": "🔮", "rift": "🌌", "shift": "💨", "coil": "🌌",
+            "hook": "⛓️", "rot": "🤢", "flesh": "💪", "dismember": "🔪", "dagger": "🔪",
+            "blink": "⚡", "scream": "🗣️", "sonic": "💥", "plasma": "⚡", "link": "⛓️",
+            "current": "🌊", "eye": "👁️️", "burrow": " burrow", "sand": "⏳",
+            "stinger": "🦂", "epicenter": "💥", "shadowraze": "💥", "frenzy": "👻",
+            "dark_lord": "💀", "requiem": "💀", "arcane_bolt": "🔮", "concussive": "💥",
+            "seal": "📜", "flare": " flare", "pact": "👻", "pounce": "🐾", "essence": "👻",
+            "dance": "🕺", "scatter": "🔫", "cookie": "🍪", "shredder": "⚙️",
+            "kisses": "💋", "shrapnel": "💣", "headshot": "🎯", "aim": "🎯",
+            "assassinate": "🔪", "hammer": "🔨", "cleave": "🪓", "cry": "🗣️", "god": "⚔️",
+            "refraction": "🪄", "meld": "🪞", "psiblades": "🗡️", "psionic": "💥",
+            "reflection": "🪞", "illusion": "👻", "meta": "👹", "sunder": "💔",
+            "laser": "💥", "march": "🤖", "matrix": "🛡️", "rearm": "🔄", "rage": "👹",
+            "axes": "🪓", "fervor": "🔥", "trance": "🕺", "remnant": "🔮", "astral": "👻",
+            "pulse": "💥", "step": "👟", "blast": "💥", "vampiric": "🩸",
+            "strike": "⚔️", "reincarnation": "💀", "arc": "⚡", "bolt": "⚡", "jump": "⚡",
             "wrath": "⛈️"
         }
 
         RU_NAMES = {
-            "purple": "Эпический талант",
-            "blue": "Редкий талант",
-            "orange": "Легендарный талант",
-            "scepter": "Аганим",
-            "innate": "Врожденный талант",
-            "shard": "Аганим шард",
+            "purple": "Эпический талант", "blue": "Редкий талант", "orange": "Легендарный талант",
+            "scepter": "Аганим", "innate": "Врожденный талант", "shard": "Аганим шард",
             "hero_talent": "Таланты героя",
         }
         
@@ -373,12 +212,10 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     item_type = upgrade.get("type")
                     ru_rows = upgrade.get("ruRows")
                     change_type = upgrade.get("changeType", "").lower()
-                    
                     if ru_rows:
                         item_emoji = EMOJI_MAP.get(item_type.lower(), "")
                         change_emoji = EMOJI_MAP.get(change_type, "")
                         name = RU_NAMES.get(item_type.lower(), "")
-                        
                         text_content += f"\n{item_emoji} {escape_markdown(name)} {item_emoji}\n"
                         text_content += f"  {change_emoji} {escape_markdown(ru_rows.strip())}\n"
             
@@ -386,7 +223,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             if talents:
                 for talent in talents:
                     talent_name = talent.get("name", "")
-                    
                     if talent_name == "hero_talent":
                         name = RU_NAMES.get("hero_talent")
                         emoji = EMOJI_MAP.get("hero_talent")
@@ -401,10 +237,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     for color in ["orangeRuRows", "purpleRuRows", "blueRuRows", "abilityRuRows"]:
                         ru_rows = talent.get(color)
                         change_type = talent.get("changeType", "").lower()
-
                         if ru_rows:
                             formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                            
                             if color == "orangeRuRows":
                                 emoji = EMOJI_MAP.get("orange", "")
                                 name = RU_NAMES.get("orange", "")
@@ -422,12 +256,10 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                                 if line.strip():
                                     change_emoji = EMOJI_MAP.get(change_type, "")
                                     text_content += f"  {change_emoji} {escape_markdown(line.strip())}\n"
-
         
         text_to_send = f"*{escape_markdown(title)}*\n\n{text_content}"
         if len(text_to_send) > 4096:
             text_to_send = text_to_send[:4000] + "\n\n_(текст обрезан)_"
-        
         await update.message.reply_text(text_to_send, parse_mode='MarkdownV2')
 
         kb = [[
@@ -436,12 +268,125 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         ]]
         await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
 
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP Error: {e.response.status_code} on {e.request.url}")
-        await update.message.reply_text("Не удалось получить информацию об обновлении. Возможно, сайт недоступен.")
     except Exception as e:
         logger.exception("Error fetching update from API")
         await update.message.reply_text("Произошла ошибка при получении данных. Попробуйте позже.")
+
+
+async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    log_user_message(user, "Герои")
+    await update.message.reply_text("🔎 Загружаю список героев...")
+
+    heroes_data = get_heroes_from_api()
+
+    if not heroes_data:
+        await update.message.reply_text("Не удалось получить список героев. Попробуйте позже.")
+        return
+
+    heroes_by_attribute = {
+        "Strength": [],
+        "Agility": [],
+        "Intellect": [],
+        "All": []
+    }
+
+    for hero in heroes_data:
+        attribute = hero.get("attribute", "All")
+        heroes_by_attribute[attribute].append(hero)
+
+    response_text = "Выберите героя:\n"
+    keyboard = []
+
+    for attribute, heroes in heroes_by_attribute.items():
+        if heroes:
+            response_text += f"\n*{escape_markdown(attribute)}*:\n"
+            for hero in sorted(heroes, key=lambda h: h.get('userFriendlyName')):
+                hero_name = hero.get("userFriendlyName", "Неизвестный герой")
+                url_name = hero.get("urlName")
+                callback_data = f"hero_{url_name}"
+                keyboard.append([InlineKeyboardButton(hero_name, callback_data=callback_data)])
+                
+    markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(response_text, parse_mode='MarkdownV2', reply_markup=markup)
+
+
+async def handle_hero_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    url_name = query.data.replace("hero_", "")
+
+    log_user_message(query.from_user, f"Выбран герой: {url_name}")
+
+    cdn_hero_url = urljoin(CDN_HEROES_URL, f"ru_npc_dota_hero_{url_name}.json")
+
+    try:
+        r = requests.get(cdn_hero_url, timeout=10)
+        r.raise_for_status()
+        hero_data = r.json()
+
+        if not hero_data:
+            await query.edit_message_text("Информация о герое не найдена.")
+            return
+
+        text_content = f"*{escape_markdown(hero_data.get('userFriendlyName', 'Неизвестный герой'))}*\n\n"
+        
+        # Раздел "Отличия от Dota"
+        changes = hero_data.get("changes")
+        if changes:
+            text_content += f"*{escape_markdown('Отличия от Dota')}*:\n"
+            text_content += f"{escape_markdown(changes)}\n\n"
+
+        # Раздел "Улучшения"
+        upgrades = hero_data.get("upgrades")
+        if upgrades:
+            text_content += f"*{escape_markdown('Улучшения')}*:\n"
+            upgrade_emojis = {"shard": "🔷", "scepter": "🔮", "innate": "🔥"}
+            for upgrade in upgrades:
+                upgrade_type = upgrade.get("upgradeType")
+                upgrade_text = upgrade.get("upgradeText", "")
+                emoji = upgrade_emojis.get(upgrade_type, "✨")
+                if upgrade_type == "shard":
+                    text_content += f"  {emoji} {escape_markdown('Аганим шард')}: {escape_markdown(upgrade_text)}\n"
+                elif upgrade_type == "scepter":
+                    text_content += f"  {emoji} {escape_markdown('Аганим')}: {escape_markdown(upgrade_text)}\n"
+                elif upgrade_type == "innate":
+                    text_content += f"  {emoji} {escape_markdown('Врожденный талант')}: {escape_markdown(upgrade_text)}\n"
+            text_content += "\n"
+        
+        # Раздел "Таланты"
+        talent_groups = [
+            ("orangeTalents", "Легендарные таланты", "🟧"),
+            ("purpleTalents", "Эпические таланты", "🟪"),
+            ("blueTalents", "Редкие таланты", "🟦")
+        ]
+        
+        for talent_key, talent_name, talent_emoji in talent_groups:
+            talents = hero_data.get(talent_key)
+            if talents:
+                text_content += f"*{escape_markdown(talent_name)}*:\n"
+                for talent in talents:
+                    talent_text = talent.get("talentText", "")
+                    if talent_text:
+                        text_content += f"  {talent_emoji} {escape_markdown(talent_text)}\n"
+                text_content += "\n"
+
+        hero_web_url = f"https://dota1x6.com/heroes/{url_name}"
+        
+        if len(text_content) > 4096:
+            text_content = text_content[:4000] + "\n\n_(текст обрезан)_"
+
+        await query.edit_message_text(
+            text_content,
+            parse_mode='MarkdownV2',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Подробнее на сайте", url=hero_web_url)]])
+        )
+
+    except Exception as e:
+        logger.exception(f"Ошибка при получении данных о герое {url_name}")
+        await query.edit_message_text("Произошла ошибка при получении данных о герое.")
 
 
 async def check_stats_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -527,8 +472,8 @@ async def unknown_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Получено фото")
-
     await update.message.reply_text("Я получил ваше фото. К сожалению, я не могу проанализировать его содержимое.")
+
 
 def main():
     if TOKEN == "ВАШ_ТОКЕН_ТЕЛЕГРАМ":
@@ -548,6 +493,8 @@ def main():
     app.add_handler(CommandHandler("previewlog", previewlog))
     app.add_handler(conv)
     app.add_handler(MessageHandler(filters.Regex("^Обновления$"), handle_updates_button))
+    app.add_handler(MessageHandler(filters.Regex("^Герои$"), handle_heroes_button))
+    app.add_handler(CallbackQueryHandler(handle_hero_callback, pattern="^hero_"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_text))
 
