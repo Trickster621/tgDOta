@@ -195,6 +195,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Привет! Выберите действие:", reply_markup=markup)
 
+# Новый обработчик для кнопки "Проверить статистику"
+async def handle_check_stats_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    log_user_message(user, "Проверить статистику")
+    await update.message.reply_text("Эта функция находится в разработке. Пожалуйста, попробуйте 'Обновления' или 'Герои'.")
+
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user_message(user, "Обновления")
@@ -542,6 +548,7 @@ def main():
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Regex(r'^Проверить статистику$'), handle_check_stats_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     
