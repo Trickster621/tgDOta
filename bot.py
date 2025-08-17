@@ -240,15 +240,32 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     avg_place = round(player_data.get("avgPlace", 0), 2)
     first_places = player_data.get("firstPlaces", "неизвестно")
     rating = player_data.get("rating", "неизвестно")
+    social_data = player_data.get("social", {})
+    
+    youtube_url = social_data.get("youtube")
+    twitch_url = social_data.get("twitch")
+    is_youtube_live = social_data.get("isYoutubeLive")
+    is_twitch_live = social_data.get("isTwitchLive")
 
-    msg = (
-        f"Всего игр: {match_count}\n"
-        f"Среднее место: {avg_place}\n"
-        f"Первых мест: {first_places}\n"
-        f"Рейтинг: {rating}"
-    )
+    msg = f"*Статистика игрока*\n"
+    msg += f"Всего игр: {match_count}\n"
+    msg += f"Среднее место: {avg_place}\n"
+    msg += f"Первых мест: {first_places}\n"
+    msg += f"Рейтинг: {rating}\n\n"
 
-    await update.message.reply_text(msg)
+    msg_social = ""
+    if youtube_url:
+        yt_status = "🔴" if is_youtube_live else "⚪️"
+        msg_social += f"YouTube: {yt_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(youtube_url)})\n"
+    if twitch_url:
+        twitch_status = "🔴" if is_twitch_live else "⚪️"
+        msg_social += f"Twitch: {twitch_status} [{escape_markdown_v2('Канал')}]({escape_markdown_v2(twitch_url)})"
+        
+    final_msg = escape_markdown_v2(msg)
+    if msg_social:
+        final_msg += f"*Социальные сети*\n{msg_social}"
+
+    await update.message.reply_text(final_msg, parse_mode='MarkdownV2')
 
     player_url = f"{BASE_URL}/players/{dota_id}"
     inline_keyboard = [
