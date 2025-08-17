@@ -66,6 +66,8 @@ def format_text_with_spaces(text):
     
     # Ищем заглавную букву, которая идет после строчной
     text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', text)
+    # Ищем заглавную букву, которая идет после точки (в случае, если точка была удалена)
+    text = re.sub(r'([.?!])([А-ЯЁ])', r'\1 \2', text)
     return text
 
 def escape_html_and_format(text):
