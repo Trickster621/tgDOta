@@ -346,8 +346,10 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
+    # Отфильтровываем дублирующиеся "innate" из изменений
+    changes = [change for change in hero_json.get('changes', []) if change.get('upgradeType') != 'innate']
+    
     # 1. Отличия от Dota (Changes)
-    changes = hero_json.get('changes', [])
     if changes:
         text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
         for change in changes:
