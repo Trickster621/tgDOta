@@ -384,7 +384,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
     players = leaderboard_data.get("data")
     players_to_display = players[:50]
     
-    message_text = f"*ТОП-50 ИГРОКОВ LADDER\\.*\n\n"
+    message_text = f"*{escape_markdown_v2('ТОП-50 ИГРОКОВ LADDER.')}*\n\n"
     
     for player in players_to_display:
         place = player.get("place")
