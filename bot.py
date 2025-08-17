@@ -8,7 +8,7 @@ from datetime import datetime
 import requests
 import cloudscraper
 from bs4 import BeautifulSoup
-from requests_html import HTMLSession
+from requests_html import AsyncHTMLSession
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -91,15 +91,15 @@ def get_latest_update_info_from_api():
         return None
 
 # ---------- Requests-HTML Web scraping ----------
-def get_page_content_with_requests_html(url):
+async def get_page_content_with_requests_html(url):
     """
     Получает полный HTML-контент страницы после выполнения JavaScript.
     """
-    session = HTMLSession()
+    session = AsyncHTMLSession()
     try:
         logger.info(f"Начинаю рендеринг страницы: {url}")
-        r = session.get(url, timeout=20)
-        r.html.render(timeout=20, sleep=1)
+        r = await session.get(url, timeout=20)
+        await r.html.arender(timeout=20, sleep=1)
         
         content = r.html.html
         logger.info("Страница успешно загружена, возвращаю контент.")
@@ -110,7 +110,7 @@ def get_page_content_with_requests_html(url):
         return None
     
     finally:
-        session.close()
+        await session.close()
 
 # ---------- Handlers ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,7 +139,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     
     # ИСПОЛЬЗУЕМ requests-html для получения HTML
-    page_content = get_page_content_with_requests_html(update_url)
+    page_content = await get_page_content_with_requests_html(update_url)
     
     if not page_content:
         await update.message.reply_text("Не удалось получить контент страницы. Пожалуйста, попробуйте позже.")
