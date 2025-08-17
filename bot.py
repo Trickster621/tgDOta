@@ -226,7 +226,6 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dota_id = update.message.text
     log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
 
-    # Убрана проверка, так как она теперь в фильтре ConversationHandler
     url = f"{API_PLAYERS_URL}?playerId={dota_id}"
     data = await fetch_json(url)
 
