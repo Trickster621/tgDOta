@@ -63,32 +63,37 @@ def escape_html_and_format(text):
     """
     Удаляет HTML-теги и заменяет <b> на * для Markdown.
     
-    Используется для форматирования текста, содержащего
-    HTML-теги, полученные из API.
+    Эта функция полностью очищает текст от HTML-тегов, таких как <br>, <b>,
+    и тегов <font>, чтобы предотвратить ошибки форматирования.
     """
-    text = text.replace('<font color=#A3E635>', '').replace('<font color=#FB923C>', '').replace('<font color=#FFFFFF>', '').replace("</font>", "")
-    text = text.replace("<b>", "*").replace("</b>", "*")
-    return escape_markdown(text)
+    if not isinstance(text, str):
+        return ""
+    
+    # Регулярное выражение для поиска и удаления любых HTML-тегов
+    clean_text = re.sub(r'<[^>]+>', '', text)
+    
+    # Теперь экранируем символы Markdown
+    return escape_markdown(clean_text)
 
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     """Отправляет длинное сообщение, разбивая его на части."""
     max_length = 4096
     
-    # Разделяем по переводам строки
-    parts = text.split('\n\n')
+    parts = text.split('\n')
     current_message = ""
     
     for part in parts:
-        if len(current_message) + len(part) + 2 < max_length:
-            current_message += part + "\n\n"
+        if len(current_message) + len(part) + 1 < max_length:
+            current_message += part + "\n"
         else:
             if current_message:
                 await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
-                await asyncio.sleep(1) # Задержка, чтобы не превысить лимит запросов
-            current_message = part + "\n\n"
+                await asyncio.sleep(0.5)
+            current_message = part + "\n"
             
     if current_message:
         await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
+
 
 # ---------- API ----------
 async def fetch_json(url):
@@ -346,8 +351,8 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if changes:
         text_parts.append("*Изменения:*")
         for change in changes:
-            text_parts.append(f"• _{escape_markdown(change.get('description', ''))}_")
-        text_parts.append("") # Пустая строка для разделения
+            text_parts.append(f"• _{escape_html_and_format(change.get('description', ''))}_")
+        text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
     upgrades = hero_json.get('upgrades', [])
@@ -356,7 +361,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for upgrade in upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
             
-            # Определяем заголовок на основе upgradeType
             if upgrade_type == 'scepter':
                 upgrade_title = "Аганим"
             elif upgrade_type == 'shard':
@@ -366,7 +370,17 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             else:
                 upgrade_title = "Неизвестное улучшение"
             
-            text_parts.append(f"• *{escape_markdown(upgrade_title)}:* {escape_html_and_format(upgrade.get('description', ''))}")
+            # Обработка extraValues для каждого улучшения
+            extra_values_text = ""
+            for extra_value_pair in upgrade.get('extraValues', []):
+                key = extra_value_pair[0]
+                value = extra_value_pair[1]
+                extra_values_text += f"_{escape_html_and_format(key)}: {escape_html_and_format(value)}_\n"
+            
+            description = escape_html_and_format(upgrade.get('description', ''))
+            
+            upgrade_text = f"• *{escape_markdown(upgrade_title)}:*\n{extra_values_text}{description}"
+            text_parts.append(upgrade_text.strip())
         text_parts.append("")
 
     # 3. Таланты (Talents)
@@ -386,7 +400,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         text_parts.append(f"• {escape_html_and_format(description)}")
             text_parts.append("")
 
-    message_text = "\n".join(text_parts)
+    message_text = "\n".join(text_parts).strip()
     
     if not message_text:
         message_text = "Информация по этому герою не найдена."
@@ -418,10 +432,8 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
         return
 
-    # Удаляем временное сообщение перед отправкой основного
     await query.message.delete()
     
-    # Отправляем отформатированные детали о герое
     await send_hero_details(update, context, hero_json_data)
     
     keyboard = [
@@ -429,7 +441,6 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
-    # Отправляем кнопки после основного сообщения
     await context.bot.send_message(
         chat_id=query.message.chat_id, 
         text="Что еще?", 
