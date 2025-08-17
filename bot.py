@@ -346,16 +346,13 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     text_parts = []
     
-    # Заголовок для отличий
-    changes_title = "Отличия от Dota:"
-    text_parts.append(f"*{escape_markdown(changes_title)}*")
-    
     # 1. Отличия от Dota (Changes)
     changes = hero_json.get('changes', [])
     if changes:
+        text_parts.append(f"*{escape_markdown('Отличия от Dota:')}*")
         for change in changes:
             text_parts.append(f"• _{escape_html_and_format(change.get('description', ''))}_")
-    text_parts.append("")
+        text_parts.append("")
     
     # 2. Улучшения (Upgrades: Aghanim, Shard, Innate)
     upgrades = hero_json.get('upgrades', [])
@@ -364,14 +361,13 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for upgrade in upgrades:
             upgrade_type = upgrade.get('upgradeType', 'unknown')
             
+            upgrade_title = "Неизвестное улучшение"
             if upgrade_type == 'scepter':
                 upgrade_title = "Аганим"
             elif upgrade_type == 'shard':
                 upgrade_title = "Аганим Шард"
             elif upgrade_type == 'innate':
-                upgrade_title = "Врожденный"
-            else:
-                upgrade_title = "Неизвестное улучшение"
+                upgrade_title = "Врожденная способность"
             
             emoji = EMOJI_MAP.get(upgrade_type, "✨")
             
@@ -443,7 +439,6 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await send_hero_details(update, context, hero_json_data)
     
     keyboard = [
-        # Теперь все кнопки "Назад" ведут к выбору атрибутов
         [InlineKeyboardButton("Назад", callback_data="back_to_attributes")],
     ]
     markup = InlineKeyboardMarkup(keyboard)
@@ -465,8 +460,6 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
             [InlineKeyboardButton("Universal", callback_data="attribute_All")],
         ]))
-    # Предыдущий elif блок для "back_to_heroes_" удален, так как все кнопки "Назад" теперь ведут к "back_to_attributes"
-
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_user_message(update.effective_user, update.message.text)
