@@ -262,11 +262,11 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
     
     markup = InlineKeyboardMarkup(keyboard)
     
-    # Определяем, какой объект использовать для ответа
     if update.message:
         await update.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
     elif update.callback_query and update.callback_query.message:
-        await update.callback_query.message.reply_text("Выберите атрибут героя:", reply_markup=markup)
+        await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=markup)
+
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -284,12 +284,22 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     
     filtered_heroes = [h for h in heroes if h.get("attribute") == attribute or attribute == "All"]
     
+    # === НОВОЕ ИЗМЕНЕНИЕ: ПРОВЕРКА НА ПУСТОЙ СПИСОК ГЕРОЕВ ===
+    if not filtered_heroes:
+        await query.edit_message_text(
+            text="К сожалению, героев этого атрибута не найдено. Попробуйте выбрать другой.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Назад", callback_data="back_to_attributes")]
+            ])
+        )
+        return
+    # ==========================================================
+
     keyboard = []
     row = []
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName")):
         hero_id = hero.get("heroId")
         name = hero.get("userFriendlyName")
-        # Проверяем, что hero_id существует
         if hero_id:
             row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_id}"))
             if len(row) == 2:
@@ -312,7 +322,6 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     
     try:
         hero_id = query.data.split("_")[1]
-        # Дополнительная проверка на пустой или некорректный ID
         if not hero_id or hero_id == "None":
             await query.message.reply_text("Не удалось получить ID героя. Пожалуйста, попробуйте выбрать героя еще раз.")
             return
@@ -382,7 +391,6 @@ async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     if query.data == "back_to_attributes":
-        # Используем update.callback_query.message для ответа
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
             [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
