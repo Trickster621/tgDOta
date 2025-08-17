@@ -474,7 +474,7 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
     
     markup = InlineKeyboardMarkup(keyboard)
     
-    await sent_message.edit_text(message_text, reply_markup=markup, parse_mode='MarkdownV2')
+    await sent_message.edit_text(message_text, reply_markup=markup, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
 
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
