@@ -312,7 +312,6 @@ async def handle_attribute_callback(update: Update, context: ContextTypes.DEFAUL
         return
 
     filtered_heroes = []
-    # Исправляем логику: "All" теперь ищет героев с атрибутом "All"
     if attribute == "All":
         filtered_heroes = [hero for hero in heroes_data if hero.get("attribute") == "All"]
     else:
@@ -412,10 +411,14 @@ async def handle_hero_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             talents = hero_data.get(talent_key)
             if talents:
                 text_content += f"*{escape_markdown(talent_name)}*:\n"
-                for talent in talents:
-                    talent_text = talent.get("talentText", "")
-                    if talent_text:
-                        text_content += f"  {talent_emoji} {escape_markdown(talent_text)}\n"
+                # Добавляем проверку, чтобы избежать ошибки
+                if isinstance(talents, str):
+                    text_content += f"  {talent_emoji} {escape_markdown(talents)}\n"
+                else:
+                    for talent in talents:
+                        talent_text = talent.get("talentText", "")
+                        if talent_text:
+                            text_content += f"  {talent_emoji} {escape_markdown(talent_text)}\n"
                 text_content += "\n"
 
         hero_web_url = f"https://dota1x6.com/heroes/{url_name}"
