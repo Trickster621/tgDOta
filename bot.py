@@ -35,6 +35,7 @@ API_HEROES_URL = "https://stats.dota1x6.com/api/v2/heroes/"
 API_LEADERBOARD_URL = "https://stats.dota1x6.com/api/v2/leaderboard/"
 CDN_HEROES_INFO_URL = "https://cdn.dota1x6.com/shared/"
 API_PLAYERS_URL = "https://stats.dota1x6.com/api/v2/players/"
+API_STEAM_PROFILE_URL = "https://stats.dota1x6.com/api/v2/players/steam-profile"
 LEADERBOARD_PAGE_SIZE = 50
 
 # ---------- СОСТОЯНИЯ ДЛЯ CONVERSATIONHANDLER ----------
@@ -238,21 +239,21 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dota_id = update.message.text
     log_user_message(update.effective_user, f"Ввел ID: {dota_id}")
 
-    url = f"{API_PLAYERS_URL}?playerId={dota_id}"
-    data = await fetch_json(url)
-
-    if not data or not data.get("data"):
+    player_data_url = f"{API_PLAYERS_URL}?playerId={dota_id}"
+    player_data = await fetch_json(player_data_url)
+    
+    if not player_data or not player_data.get("data"):
         await update.message.reply_text("Игрок с таким ID не найден или произошла ошибка API.")
         return ConversationHandler.END
 
-    player_data = data.get("data")
-    match_count = player_data.get("matchCount", "неизвестно")
-    avg_place = round(player_data.get("avgPlace", 0), 2)
-    first_places = player_data.get("firstPlaces", "неизвестно")
-    rating = player_data.get("rating", "неизвестно")
+    player_info = player_data.get("data")
+    match_count = player_info.get("matchCount", "неизвестно")
+    avg_place = round(player_info.get("avgPlace", 0), 2)
+    first_places = player_info.get("firstPlaces", "неизвестно")
+    rating = player_info.get("rating", "неизвестно")
     
     # ИСПРАВЛЕНО: Проверяем, что social_data - словарь, иначе используем пустой.
-    social_data = player_data.get("social", {})
+    social_data = player_info.get("social", {})
     if social_data is None:
         social_data = {}
     
@@ -261,7 +262,20 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_youtube_live = social_data.get("isYoutubeLive")
     is_twitch_live = social_data.get("isTwitchLive")
 
-    msg = f"*Статистика игрока*\n"
+    # ДОБАВЛЕНО: Получение имени игрока из Steam API
+    steam_profile_url = f"{API_STEAM_PROFILE_URL}?playerId={dota_id}"
+    steam_profile_data = await fetch_json(steam_profile_url)
+    
+    player_name = None
+    if steam_profile_data and steam_profile_data.get("data"):
+        player_name = steam_profile_data.get("data").get("personaname")
+
+    if player_name:
+        header = f"*Статистика игрока {player_name}*"
+    else:
+        header = "*Статистика игрока*"
+
+    msg = f"{header}\n"
     msg += f"Всего игр: {match_count}\n"
     msg += f"Среднее место: {avg_place}\n"
     msg += f"Первых мест: {first_places}\n"
@@ -448,7 +462,9 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
             if twitch_url:
                 twitch_status = EMOJI_MAP.get("online") if is_twitch_live else EMOJI_MAP.get("offline")
                 social_links.append(f"{twitch_status} [{escape_markdown_v2('Твич')}]({escape_markdown_v2(twitch_url)})")
-            player_info += " | ".join(social_links)
+            
+            # ИСПРАВЛЕНО: Экранирование символа "|"
+            player_info += escape_markdown_v2(" | ").join(social_links)
             player_info += "\n"
 
         message_text += player_info + "\n"
