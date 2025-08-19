@@ -299,12 +299,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     latest_update_info = await fetch_json(API_UPDATES_URL)
     if not latest_update_info or not latest_update_info.get("data", {}).get("values"):
         await sent_message.edit_text("Не удалось получить информацию об обновлениях с API. Попробуйте позже.")
-        return ConversationHandler.END
+        return
 
     update_url_slug = latest_update_info["data"]["values"][0].get("url")
     if not update_url_slug:
         await sent_message.edit_text("В полученных данных нет ссылки на обновление. Попробуйте позже.")
-        return ConversationHandler.END
+        return
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
     api_update_url = f"https://stats.dota1x6.com/api/v2/updates/{update_url_slug}"
@@ -312,49 +312,48 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     api_data = await fetch_json(api_update_url)
     if not api_data or not api_data.get("data"):
         await sent_message.edit_text("Произошла ошибка при получении данных об обновлении. Попробуйте позже.")
-        return ConversationHandler.END
+        return
 
     data = api_data.get("data")
     title = data.get("ruName", "Без названия")
     output_text = f"*{escape_markdown_v2(title)}*\n\n"
     
+    # Обработка общих изменений
     if data.get("ruRows"):
-        rows_text = format_text_with_emojis(data['ruRows'])
-        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+        lines = data["ruRows"].split('\n')
         change_emoji = get_change_emoji(data.get("changeType", ""))
         for line in lines:
-            output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+            line = line.strip()
+            if line:
+                output_text += f" {change_emoji} {escape_markdown_v2(format_text_with_emojis(line))}\n"
         output_text += "\n"
         
     items = data.get("items", [])
     if items:
-        output_text += f"\n*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
+        output_text += f"*{escape_markdown_v2('Корректировки Предметов')}*\n"
         for item in items:
             ru_rows = item.get("ruRows")
             if ru_rows:
                 item_name = item.get('name', 'Неизвестный предмет').replace("_", " ")
-                output_text += f"• *{escape_markdown_v2(item_name.capitalize())}*\n"
+                output_text += f"\n• *{escape_markdown_v2(item_name.capitalize())}*\n"
                 
                 change_emoji = get_change_emoji(item.get("changeType", ""))
-                formatted_item_text = format_text_with_emojis(ru_rows)
-                
-                lines = [line.strip() for line in formatted_item_text.split('\n') if line.strip()]
+                lines = [line.strip() for line in ru_rows.split('\n') if line.strip()]
                 for line in lines:
-                    output_text += f"  {change_emoji} {escape_markdown_v2(line)}\n"
-                output_text += "\n"
+                    output_text += f" {change_emoji} {escape_markdown_v2(format_text_with_emojis(line))}\n"
 
     heroes = data.get("heroes", [])
     if heroes:
         for hero in heroes:
             hero_name = hero.get('userFriendlyName') or hero.get('userFrendlyName') or 'Неизвестный герой'
-            output_text += f"*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n\n"
+            output_text += f"\n*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n"
             
             if hero.get("ruRows"):
-                rows_text = format_text_with_emojis(hero['ruRows'])
+                rows_text = hero['ruRows']
                 lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                 change_emoji = get_change_emoji(hero.get("changeType", ""))
                 for line in lines:
-                    output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+                    output_text += f" {change_emoji} {escape_markdown_v2(format_text_with_emojis(line))}\n"
                 output_text += "\n"
 
             upgrades = hero.get("upgrades", [])
@@ -368,20 +367,16 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         elif upgrade_type == 'shard':
                             upgrade_title = "Аганим шард"
                         
-                        output_text += f"• {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
-                        rows_text = format_text_with_emojis(upgrade['ruRows'])
+                        output_text += f"\n• {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
                         
                         change_emoji = get_change_emoji(upgrade.get("changeType", ""))
-                        
-                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+                        lines = [line.strip() for line in upgrade['ruRows'].split('\n') if line.strip()]
                         for line in lines:
-                             output_text += f"  {change_emoji} {escape_markdown_v2(line)}\n"
-                        output_text += "\n"
-
+                             output_text += f"  {change_emoji} {escape_markdown_v2(format_text_with_emojis(line))}\n"
 
             talents = hero.get("talents", [])
             if talents:
-                output_text += "*Таланты героя*\n"
+                output_text += "\n*Таланты героя*\n"
                 for talent in talents:
                     talent_name = talent.get('name', '')
                     
@@ -404,7 +399,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     if display_name:
                         output_text += f"\n{talent_type_emoji} {skill_emoji} *{escape_markdown_v2(display_name)}*\n"
 
-                    
                     talent_rows = [
                         ("abilityRuRows", ""),
                         ("orangeRuRows", EMOJI_MAP.get("orange", "")),
@@ -414,12 +408,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     
                     for row_key, emoji_prefix in talent_rows:
                         if talent.get(row_key):
-                            rows_text = format_text_with_emojis(talent[row_key])
+                            rows_text = talent[row_key]
                             lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                             for line in lines:
                                 change_emoji = get_change_emoji(talent.get("changeType", ""))
-                                output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+                                output_text += f" {change_emoji} {escape_markdown_v2(format_text_with_emojis(line))}\n"
                             output_text += "\n"
+
 
     final_text = output_text.strip()
     
