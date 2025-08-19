@@ -136,7 +136,7 @@ CDN_HERO_NAME_MAPPING = {
     'invoker': 'invoker',
     'natures-prophet': 'furion',
     'shadow-fiend': 'nevermore',
-    'zeus': 'zeus'
+    'zeus': 'zeus' 
 }
 
 def escape_markdown_v2(text):
