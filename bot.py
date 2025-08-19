@@ -134,6 +134,8 @@ def escape_markdown_v2(text):
     if not isinstance(text, str):
         return str(text)
     
+    text = re.sub(r'<[^>]+>', '', text)
+    
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
@@ -143,20 +145,19 @@ def format_text_with_emojis(text):
 
     formatted_text = text
 
-    # Замена маркеров up, down, change
+    # Замена маркеров up, down, change с учетом разных окончаний
     formatted_text = re.sub(r'\b(увеличен[оаы]?)\b', f'{EMOJI_MAP.get("up", "")} \\1', formatted_text, flags=re.IGNORECASE)
     formatted_text = re.sub(r'\b(снижен[оаы]?)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
     formatted_text = re.sub(r'\b(изменен[оы]?)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
     formatted_text = re.sub(r'\b(изменено)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
     formatted_text = re.sub(r'\b(больше не)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
-
-    # Замена названий способностей и предметов на эмодзи
-    sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
+    formatted_text = re.sub(r'\b(а не)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    
+    formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
+    
+    sorted_keys = sorted(SKILL_EMOJI_MAP.keys(), key=len, reverse=True)
     for key in sorted_keys:
-        emoji = COMBINED_EMOJI_MAP[key]
-        if key.lower() in ['scepter', 'shard', 'hero_talent', 'innate', 'up', 'down', 'change']:
-            continue
-            
+        emoji = SKILL_EMOJI_MAP[key]
         pattern = r'\b' + re.escape(key) + r'\b'
         formatted_text = re.sub(pattern, f"{emoji} {key}", formatted_text, flags=re.IGNORECASE)
     
@@ -330,6 +331,21 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     
     if data.get("ruRows"):
         output_text += f"{escape_markdown_v2(format_text_with_emojis(data['ruRows']))}\n\n"
+        
+    items = data.get("items", [])
+    if items:
+        output_text += f"\n*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
+        for item in items:
+            ru_rows = item.get("ruRows")
+            if ru_rows:
+                item_name = item.get('name', 'Неизвестный предмет')
+                item_emoji = SKILL_EMOJI_MAP.get(item_name.lower().replace(" ", "_"), "✨")
+                output_text += f"• {item_emoji} *{escape_markdown_v2(item_name.capitalize())}*\n"
+                formatted_item_text = format_text_with_emojis(ru_rows)
+                lines = [line.strip() for line in formatted_item_text.split('\n') if line.strip()]
+                for line in lines:
+                    output_text += f"  {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                output_text += "\n"
 
     heroes = data.get("heroes", [])
     if heroes:
@@ -345,12 +361,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 for upgrade in upgrades:
                     if upgrade.get("ruRows"):
                         upgrade_type = upgrade.get("type", "").lower()
-                        if upgrade_type == "scepter":
-                            output_text += f"🔮 Аганим 🔮\n"
-                        elif upgrade_type == "shard":
-                            output_text += f"🔷 Аганим шард 🔷\n"
-                        else:
-                            continue
+                        upgrade_title = "Неизвестное улучшение"
+                        if upgrade_type == 'scepter':
+                            upgrade_title = "Аганим"
+                        elif upgrade_type == 'shard':
+                            upgrade_title = "Аганим шард"
+                        
+                        output_text += f" {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
                         output_text += f" {escape_markdown_v2(format_text_with_emojis(upgrade['ruRows']))}\n\n"
 
             talents = hero.get("talents", [])
@@ -359,9 +376,17 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 for talent in talents:
                     talent_name = talent.get('name', '')
                     
+                    talent_type_emoji = ""
+                    if talent.get("orangeRuRows"):
+                        talent_type_emoji = EMOJI_MAP.get("orange")
+                    elif talent.get("purpleRuRows"):
+                        talent_type_emoji = EMOJI_MAP.get("purple")
+                    elif talent.get("blueRuRows"):
+                        talent_type_emoji = EMOJI_MAP.get("blue")
+
                     if talent_name:
                         skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower().replace(" ", "_"), "✨")
-                        output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
+                        output_text += f"\n{talent_type_emoji} {skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
                     
                     if talent.get("abilityRuRows"):
                         rows_text = format_text_with_emojis(talent['abilityRuRows'])
@@ -371,7 +396,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += "\n"
                     
                     if talent.get("orangeRuRows"):
-                        output_text += f"🟧 {escape_markdown_v2('Легендарный талант')} 🟧\n"
                         rows_text = format_text_with_emojis(talent['orangeRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
@@ -379,7 +403,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += "\n"
                     
                     if talent.get("purpleRuRows"):
-                        output_text += f"🟪 {escape_markdown_v2('Эпический талант')} 🟪\n"
                         rows_text = format_text_with_emojis(talent['purpleRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
@@ -387,23 +410,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += "\n"
                     
                     if talent.get("blueRuRows"):
-                        output_text += f"🟦 {escape_markdown_v2('Редкий талант')} 🟦\n"
                         rows_text = format_text_with_emojis(talent['blueRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
                             output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
                         
-    items = data.get("items", [])
-    if items:
-        output_text += f"\n*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
-        for item in items:
-            ru_rows = item.get("ruRows")
-            if ru_rows:
-                formatted_item_text = format_text_with_emojis(ru_rows)
-                output_text += f"• {escape_markdown_v2(item.get('name', ''))}\n"
-                output_text += f"  {escape_markdown_v2(formatted_item_text)}\n\n"
-                
 
     final_text = output_text.strip()
     
@@ -417,7 +429,11 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         InlineKeyboardButton("Источник", web_app=WebAppInfo(url=update_url)),
         InlineKeyboardButton("Все обновления", web_app=WebAppInfo(url=urljoin(BASE_URL, "/updates")))
     ]]
-    await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
+    await update.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Смотреть на сайте:",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
     return ConversationHandler.END
 
 
