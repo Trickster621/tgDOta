@@ -409,8 +409,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     await send_long_message(context, update.effective_chat.id, text_to_send)
 
     kb = [[
-        InlineKeyboardButton("Источник", url=update_url),
-        InlineKeyboardButton("Все обновления", url=urljoin(BASE_URL, "/updates"))
+        InlineKeyboardButton("Источник", web_app=WebAppInfo(url=update_url)),
+        InlineKeyboardButton("Все обновления", web_app=WebAppInfo(url=urljoin(BASE_URL, "/updates")))
     ]]
     await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
     return ConversationHandler.END
