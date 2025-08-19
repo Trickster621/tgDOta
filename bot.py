@@ -130,15 +130,6 @@ EMOJI_MAP = {
 }
 COMBINED_EMOJI_MAP = {**SKILL_EMOJI_MAP, **EMOJI_MAP}
 
-# Словарь для маппинга urlName на имя файла на CDN
-CDN_HERO_NAME_MAPPING = {
-    'antimage': 'antimage',
-    'invoker': 'invoker',
-    'natures-prophet': 'furion',
-    'shadow-fiend': 'nevermore',
-    'zeus': 'zeus' 
-}
-
 def escape_markdown_v2(text):
     if not isinstance(text, str):
         return str(text)
@@ -543,10 +534,10 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     row = []
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName") or x.get("userFrendlyName", "")):
         name = hero.get("userFriendlyName") or hero.get("userFrendlyName")
-        url_name = hero.get("urlName")
+        hero_name_api = hero.get("name") # <-- Используем 'name' для запроса
         
-        if name and url_name:
-            row.append(InlineKeyboardButton(name, callback_data=f"hero_name_{url_name}"))
+        if name and hero_name_api:
+            row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_name_api}"))
             if len(row) == 2:
                 keyboard.append(row)
                 row = []
@@ -671,23 +662,22 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     
     try:
-        hero_url_name = query.data.split("_", 2)[2]
-        if not hero_url_name:
+        hero_name_api = query.data.split("_", 1)[1]
+        if not hero_name_api:
             await query.message.reply_text("Не удалось получить имя героя. Пожалуйста, попробуйте выбрать героя еще раз.")
             return
     except (IndexError, ValueError):
         await query.message.reply_text("Произошла ошибка при обработке данных. Пожалуйста, сообщите об этом разработчику.")
         return
     
-    await query.message.edit_text(f"Загружаю информацию о герое {hero_url_name}...")
+    await query.message.edit_text(f"Загружаю информацию о герое {hero_name_api}...")
     
-    hero_api_url_name = CDN_HERO_NAME_MAPPING.get(hero_url_name, hero_url_name.replace('-', '_'))
-    full_api_url = f"{CDN_HEROES_INFO_URL}ru_npc_dota_hero_{hero_api_url_name}.json"
+    full_api_url = f"{CDN_HEROES_INFO_URL}ru_{hero_name_api}.json"
     
     hero_json_data = await fetch_json(full_api_url)
     
     if not hero_json_data:
-        await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
+        await query.message.edit_text(f"Не удалось получить данные для героя {hero_name_api}. Попробуйте позже.")
         return
         
     hero_name = hero_json_data.get('userFriendlyName') or hero_json_data.get('userFrendlyName', 'Герой')
@@ -756,7 +746,7 @@ def main():
     
     application.add_handler(conv_handler)
     application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r"^attribute_"))
-    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r"^hero_name_"))
+    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r"^hero_"))
     application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r"^back_to_attributes"))
     application.add_handler(CallbackQueryHandler(handle_heroes_button, pattern=r"^back_to_heroes"))
     
