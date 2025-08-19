@@ -141,7 +141,7 @@ CDN_HERO_NAME_MAPPING = {
 
 def escape_markdown_v2(text):
     if not isinstance(text, str):
-        return ""
+        return str(text)
     
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
@@ -163,7 +163,7 @@ def format_text_with_emojis(text):
     sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
     for key in sorted_keys:
         emoji = COMBINED_EMOJI_MAP[key]
-        if key.lower() == 'scepter' or key.lower() == 'shard':
+        if key.lower() in ['scepter', 'shard', 'hero_talent', 'innate']:
             continue
             
         pattern = r'\b' + re.escape(key) + r'\b'
@@ -182,31 +182,24 @@ def format_text_with_emojis(text):
         flags=re.IGNORECASE
     )
     
-    return escape_markdown_v2(formatted_text)
-
+    return formatted_text
 
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     max_length = 4096
     
-    # Экранируем все символы в тексте перед разделением на части
-    safe_text = escape_markdown_v2(text)
-    
-    parts = safe_text.split('\n')
+    # Мы экранируем текст уже на этапе формирования, поэтому здесь этого делать не нужно
+    parts = text.split('\n')
     current_message = ""
     
     for part in parts:
-        # Проверяем, не превысим ли лимит, добавляя текущую часть
         if len(current_message) + len(part) + 1 < max_length:
             current_message += part + "\n"
         else:
-            # Если превысим, отправляем текущее сообщение
             if current_message:
                 await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
                 await asyncio.sleep(0.5)
-            # Начинаем новое сообщение с текущей части
             current_message = part + "\n"
             
-    # Отправляем оставшуюся часть сообщения
     if current_message:
         await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
 
@@ -345,13 +338,16 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     title = data.get("ruName", "Без названия")
     output_text = f"*{escape_markdown_v2(title)}*\n\n"
     
-    heroes = data.get("heroes", [])
-    items = data.get("items", [])
+    # Общие изменения
+    if data.get("ruRows"):
+        output_text += f"{format_text_with_emojis(data['ruRows'])}\n\n"
 
     # Обработка героев
+    heroes = data.get("heroes", [])
     if heroes:
         for hero in heroes:
-            hero_name = hero.get('userFriendlyName', 'Неизвестный герой')
+            # Ищем имя героя, учитывая возможную опечатку
+            hero_name = hero.get('userFriendlyName') or hero.get('userFrendlyName') or 'Неизвестный герой'
             output_text += f"*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n\n"
             
             # Общие изменения героя
@@ -365,65 +361,65 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     if upgrade.get("ruRows"):
                         upgrade_type = upgrade.get("type", "").lower()
                         if upgrade_type == "scepter":
-                            output_text += "🔮 Аганим 🔮\n"
+                            output_text += f"🔮 Аганим 🔮\n"
                         elif upgrade_type == "shard":
-                            output_text += "🔷 Аганим шард 🔷\n"
+                            output_text += f"🔷 Аганим шард 🔷\n"
                         else:
                             continue
                         output_text += f" {format_text_with_emojis(upgrade['ruRows'])}\n\n"
 
-            # Обработка талантов и способностей
+            # Обработка талантов
             talents = hero.get("talents", [])
             if talents:
                 output_text += "🤓 *Таланты героя* 🤓\n"
                 for talent in talents:
-                    talent_name = talent.get('name', 'Неизвестная способность')
-                    has_changes = any(talent.get(key) for key in ["abilityRuRows", "blueRuRows", "purpleRuRows", "orangeRuRows"])
-                    if not has_changes:
-                        continue
+                    talent_name = talent.get('name', '')
                     
-                    if talent_name != "hero_talent":
+                    if talent_name:
                         skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower().replace(" ", "_"), "✨")
                         output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
                     
                     if talent.get("abilityRuRows"):
-                        output_text += f"  {format_text_with_emojis(talent['abilityRuRows'])}\n"
+                        output_text += f" {format_text_with_emojis(talent['abilityRuRows'])}\n"
                     
                     if talent.get("orangeRuRows"):
-                        output_text += f"  🟧 Легендарный талант 🟧\n"
-                        formatted_rows = talent['orangeRuRows'].replace("\r\n", "\n").strip()
-                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        output_text += " 🟧 Легендарный талант 🟧\n"
+                        rows_text = format_text_with_emojis(talent['orangeRuRows'])
+                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                             output_text += f"   - {format_text_with_emojis(line)}\n"
+                            output_text += f" - {line}\n"
+                        output_text += "\n"
                     
                     if talent.get("purpleRuRows"):
-                        output_text += f"  🟪 Эпический талант 🟪\n"
-                        formatted_rows = talent['purpleRuRows'].replace("\r\n", "\n").strip()
-                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        output_text += " 🟪 Эпический талант 🟪\n"
+                        rows_text = format_text_with_emojis(talent['purpleRuRows'])
+                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                             output_text += f"   - {format_text_with_emojis(line)}\n"
-
+                            output_text += f" - {line}\n"
+                        output_text += "\n"
+                    
                     if talent.get("blueRuRows"):
-                        output_text += f"  🟦 Редкий талант 🟦\n"
-                        formatted_rows = talent['blueRuRows'].replace("\r\n", "\n").strip()
-                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        output_text += " 🟦 Редкий талант 🟦\n"
+                        rows_text = format_text_with_emojis(talent['blueRuRows'])
+                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                            output_text += f"   - {format_text_with_emojis(line)}\n"
-
-                output_text += "\n"
+                            output_text += f" - {line}\n"
+                        output_text += "\n"
 
     # Обработка предметов
+    items = data.get("items", [])
     if items:
         output_text += "*Корректировки Предметов*\n\n"
         for item in items:
-            item_name = item.get("userFriendlyName", "Неизвестный предмет")
+            item_name = item.get("userFriendlyName") or item.get("userFrendlyName") or "Неизвестный предмет"
             output_text += f"*{escape_markdown_v2(f'Изменения для {item_name}')}*\n"
             if item.get("ruRows"):
-                lines = [line.strip() for line in item['ruRows'].replace("\r\n", "\n").split('\n') if line.strip()]
+                rows_text = format_text_with_emojis(item['ruRows'])
+                lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                 for line in lines:
-                    output_text += f" - {format_text_with_emojis(line)}\n"
+                    output_text += f" - {line}\n"
             output_text += "\n"
-
+    
     final_text = output_text.strip()
     
     if not final_text or final_text.strip() == f"*{escape_markdown_v2(title)}*":
@@ -505,7 +501,6 @@ async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAUL
     
     await sent_message.edit_text(message_text, reply_markup=markup, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
-
 async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await log_user_message(user, "Герои")
@@ -525,7 +520,6 @@ async def handle_heroes_button(update: Update, context: ContextTypes.DEFAULT_TYP
     elif update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=markup)
     return ConversationHandler.END
-
 
 async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -555,8 +549,8 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
 
     keyboard = []
     row = []
-    for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName")):
-        name = hero.get("userFriendlyName")
+    for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName") or x.get("userFrendlyName", "")):
+        name = hero.get("userFriendlyName") or hero.get("userFrendlyName")
         url_name = hero.get("urlName")
         
         if name and url_name:
@@ -680,7 +674,6 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     await send_long_message(context, update.callback_query.message.chat_id, message_text)
 
-
 async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -705,7 +698,7 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.edit_text(f"Не удалось получить данные для героя {hero_url_name}. Попробуйте позже.")
         return
         
-    hero_name = hero_json_data.get('userFriendlyName', 'Герой')
+    hero_name = hero_json_data.get('userFriendlyName') or hero_json_data.get('userFrendlyName', 'Герой')
 
     await query.message.delete()
     
@@ -741,60 +734,44 @@ async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id != OWNER_ID:
         await update.message.reply_text("У вас нет прав для выполнения этой команды.")
         return
-
     if not RECENT_MESSAGES:
-        await update.message.reply_text("В памяти нет последних сообщений.")
+        await update.message.reply_text("Нет сообщений для отображения.")
         return
-    
-    last_10_messages = list(RECENT_MESSAGES)[-10:]
-    log_text = "".join(last_10_messages)
-    
-    await update.message.reply_text(f"Последние 10 сообщений:\n```\n{log_text}\n```", parse_mode='MarkdownV2')
-
-async def get_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != OWNER_ID:
-        await update.message.reply_text("У вас нет прав для выполнения этой команды.")
-        return
-        
-    if not RECENT_MESSAGES:
-        await update.message.reply_text("В памяти нет сообщений.")
-        return
-
-    log_text = "".join(list(RECENT_MESSAGES))
-    
-    await send_long_message(context, update.effective_chat.id, f"Весь лог из памяти:\n```\n{log_text}\n```")
-
-async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await log_user_message(update.effective_user, update.message.text)
-    await update.message.reply_text("Простите, я не понял эту команду. Пожалуйста, используйте кнопки.")
-
+    log_text = "".join(RECENT_MESSAGES)
+    await send_long_message(context, update.effective_chat.id, escape_markdown_v2(log_text))
 
 def main():
     application = Application.builder().token(TOKEN).build()
-
-    dota_stats_conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r'^Проверить статистику$'), start_dota_stats)],
+    
+    # Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("log", preview_log))
+    
+    conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^Проверить статистику$"), start_dota_stats),
+            MessageHandler(filters.Regex("^Обновления$"), handle_updates_button),
+            MessageHandler(filters.Regex("^Герои$"), handle_heroes_button),
+            MessageHandler(filters.Regex("^Ладдер$"), handle_leaderboard_button),
+        ],
         states={
-            GET_DOTA_ID: [MessageHandler(filters.Regex(r'^\d+$'), get_dota_id)]
+            GET_DOTA_ID: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)
+            ]
         },
         fallbacks=[CommandHandler("cancel", cancel_dota_stats)],
     )
+    
+    application.add_handler(conv_handler)
+    application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r"^attribute_"))
+    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r"^hero_name_"))
+    application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r"^back_to_attributes"))
+    application.add_handler(CallbackQueryHandler(handle_heroes_button, pattern=r"^back_to_heroes"))
+    
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Conflict:
+        logger.warning("Conflict detected, polling will continue.")
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("log_preview", preview_log))
-    application.add_handler(CommandHandler("get_log", get_log))
-    application.add_handler(dota_stats_conv_handler)
-    application.add_handler(MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button))
-    application.add_handler(MessageHandler(filters.Regex(r'^Ладдер$'), handle_leaderboard_button))
-    application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
-    application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r'^attribute_'))
-    application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
-    application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_to_attributes'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
-
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
