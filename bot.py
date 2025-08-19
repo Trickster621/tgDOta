@@ -145,13 +145,8 @@ def format_text_with_emojis(text):
 
     formatted_text = text
 
-    # Замена маркеров up, down, change с учетом разных окончаний
-    formatted_text = re.sub(r'\b(увеличен[оаы]?)\b', f'{EMOJI_MAP.get("up", "")} \\1', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'\b(снижен[оаы]?)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'\b(изменен[оы]?)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'\b(изменено)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'\b(больше не)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'\b(а не)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    # УДАЛЕНИЕ: Убрана логика замены для слов 'увеличен', 'снижен' и 'изменен'.
+    # Это теперь будет обрабатываться через changeType.
     
     formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
     
