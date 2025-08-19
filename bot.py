@@ -275,7 +275,7 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if favorite_hero_url:
         hero_name = favorite_hero_url.replace("npc_dota_hero_", "").capitalize()
-        msg += f"Лучший герой: {escape_markdown_v2(hero_name)}\n"
+        msg += f"Любимый герой: {escape_markdown_v2(hero_name)}\n" # <-- ИЗМЕНЕНИЕ ЗДЕСЬ
         
     if youtube_url:
         yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
@@ -390,7 +390,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                             output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
 
-    items = data.get("items", [])
+    items = data.get("items", []) # <-- ДОБАВЛЕНИЕ: ОБРАБОТКА ПРЕДМЕТОВ
     if items:
         output_text += f"*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
         for item in items:
@@ -534,7 +534,7 @@ async def handle_attribute_selection(update: Update, context: ContextTypes.DEFAU
     row = []
     for hero in sorted(filtered_heroes, key=lambda x: x.get("userFriendlyName") or x.get("userFrendlyName", "")):
         name = hero.get("userFriendlyName") or hero.get("userFrendlyName")
-        hero_name_api = hero.get("name") # <-- Используем 'name' для запроса
+        hero_name_api = hero.get("name")
         
         if name and hero_name_api:
             row.append(InlineKeyboardButton(name, callback_data=f"hero_{hero_name_api}"))
