@@ -181,7 +181,7 @@ def format_text_with_emojis(text):
         formatted_text,
         flags=re.IGNORECASE
     )
-        
+    
     return escape_markdown_v2(formatted_text)
 
 
@@ -336,77 +336,97 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
 
     data = api_data.get("data")
     title = data.get("ruName", "Без названия")
-    text_content = ""
+    output_text = f"*{escape_markdown_v2(title)}*\n\n"
+    
     heroes = data.get("heroes", [])
+    items = data.get("items", [])
 
-    RU_NAMES = {
-        "purple": "Эпический талант", "blue": "Редкий талант", "orange": "Легендарный талант",
-        "scepter": "Аганим", "innate": "Врожденный талант", "shard": "Аганим шард",
-        "hero_talent": "Таланты героя", "ability": "Изменения способностей",
-    }
-    
-    for hero in heroes:
-        hero_name = hero.get("userFriendlyName", "Неизвестный герой")
-        if text_content:
-            text_content += "\n\n"
-        text_content += f"*{escape_markdown_v2('Изменения для ')}{escape_markdown_v2(hero_name)}*\n"
-        
-        upgrades = hero.get("upgrades", [])
-        for upgrade in upgrades:
-            item_type = upgrade.get("type", "").lower()
-            ru_rows = upgrade.get("ruRows")
-            change_type = upgrade.get("changeType", "").lower()
+    # Обработка героев
+    if heroes:
+        for hero in heroes:
+            hero_name = hero.get('userFriendlyName', 'Неизвестный герой')
+            output_text += f"*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n\n"
             
-            if ru_rows:
-                if text_content.strip().endswith((']')):
-                    text_content += "\n"
-                item_emoji = EMOJI_MAP.get(item_type, "✨")
-                change_emoji = EMOJI_MAP.get(change_type, "")
-                name = RU_NAMES.get(item_type, "")
-                
-                text_content += f"\n{item_emoji} {escape_markdown_v2(name)} {item_emoji}\n"
-                
-                for line in ru_rows.replace("\r\n", "\n").split('\n'):
-                    if line.strip():
-                        formatted_line = format_text_with_emojis(line.strip())
-                        text_content += f"  {change_emoji} {formatted_line}\n"
+            # Общие изменения героя
+            if hero.get("ruRows"):
+                output_text += f"{format_text_with_emojis(hero['ruRows'])}\n\n"
 
-        talents = hero.get("talents", [])
-        for talent in talents:
-            talent_name = talent.get("name", "")
-            
-            if talent_name == "hero_talent":
-                if text_content.strip().endswith((']')):
-                    text_content += "\n"
-                name = RU_NAMES.get("hero_talent")
-                emoji = EMOJI_MAP.get("hero_talent")
-                text_content += f"\n{emoji} *{escape_markdown_v2(name)}* {emoji}\n"
-            else:
-                if text_content.strip().endswith((']')):
-                    text_content += "\n"
-                skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower(), "✨")
-                text_content += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}* {skill_emoji}\n"
-            
-            for color_key in ["orange", "purple", "blue", "ability"]:
-                ru_rows = talent.get(f"{color_key}RuRows")
-                if ru_rows:
-                    formatted_rows = ru_rows.replace("\r\n", "\n").strip()
-                    emoji = EMOJI_MAP.get(color_key, "")
-                    name = RU_NAMES.get(color_key, "")
-                    change_type = talent.get("changeType", "").lower()
-                    change_emoji = EMOJI_MAP.get(change_type, "🟡")
+            # Обработка аганима и шарда
+            upgrades = hero.get("upgrades", [])
+            if upgrades:
+                for upgrade in upgrades:
+                    if upgrade.get("ruRows"):
+                        upgrade_type = upgrade.get("type", "").lower()
+                        if upgrade_type == "scepter":
+                            output_text += "🔮 Аганим 🔮\n"
+                        elif upgrade_type == "shard":
+                            output_text += "🔷 Аганим шард 🔷\n"
+                        else:
+                            continue  # Пропускаем неизвестный тип
+                        output_text += f" {format_text_with_emojis(upgrade['ruRows'])}\n\n"
 
-                    if name:
-                        text_content += f" {emoji} *{escape_markdown_v2(name)}* {emoji}\n"
+            # Обработка талантов и способностей
+            talents = hero.get("talents", [])
+            if talents:
+                output_text += "🤓 *Таланты героя* 🤓\n"
+                for talent in talents:
+                    talent_name = talent.get('name', 'Неизвестная способность')
+                    has_changes = any(talent.get(key) for key in ["abilityRuRows", "blueRuRows", "purpleRuRows", "orangeRuRows"])
+                    if not has_changes:
+                        continue
                     
-                    for line in formatted_rows.split('\n'):
-                        if line.strip():
-                            formatted_line = format_text_with_emojis(line.strip())
-                            text_content += f"  {change_emoji} {formatted_line}\n"
+                    if talent_name != "hero_talent":
+                        skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower().replace(" ", "_"), "✨")
+                        output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
+                    
+                    # Изменения самой способности
+                    if talent.get("abilityRuRows"):
+                        output_text += f"  {format_text_with_emojis(talent['abilityRuRows'])}\n"
+                    
+                    # Изменения талантов по цветам
+                    if talent.get("orangeRuRows"):
+                        output_text += f"  🟧 Легендарный талант 🟧\n"
+                        formatted_rows = talent['orangeRuRows'].replace("\r\n", "\n").strip()
+                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        for line in lines:
+                             output_text += f"   - {format_text_with_emojis(line)}\n"
+                    
+                    if talent.get("purpleRuRows"):
+                        output_text += f"  🟪 Эпический талант 🟪\n"
+                        formatted_rows = talent['purpleRuRows'].replace("\r\n", "\n").strip()
+                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        for line in lines:
+                             output_text += f"   - {format_text_with_emojis(line)}\n"
+
+                    if talent.get("blueRuRows"):
+                        output_text += f"  🟦 Редкий талант 🟦\n"
+                        formatted_rows = talent['blueRuRows'].replace("\r\n", "\n").strip()
+                        lines = [line.strip() for line in formatted_rows.split('\n') if line.strip()]
+                        for line in lines:
+                            output_text += f"   - {format_text_with_emojis(line)}\n"
+
+                output_text += "\n" # Пустая строка после блока талантов
+
+    # Обработка предметов
+    if items:
+        output_text += "*Корректировки Предметов*\n\n"
+        for item in items:
+            item_name = item.get("userFriendlyName", "Неизвестный предмет")
+            output_text += f"*{escape_markdown_v2(f'Изменения для {item_name}')}*\n"
+            if item.get("ruRows"):
+                lines = [line.strip() for line in item['ruRows'].replace("\r\n", "\n").split('\n') if line.strip()]
+                for line in lines:
+                    output_text += f" - {format_text_with_emojis(line)}\n"
+            output_text += "\n"
+
+    # Удаляем лишние пробелы и пустые строки в начале и конце
+    final_text = output_text.strip()
     
-    text_to_send = f"*{escape_markdown_v2(title)}*\n\n{text_content}"
-    
-    await send_long_message(context, update.effective_chat.id, text_to_send)
+    if not final_text or final_text.strip() == f"*{escape_markdown_v2(title)}*":
+        await update.message.reply_text("Не удалось получить данные об изменениях. Возможно, раздел пуст.")
+        return
+        
+    await send_long_message(context, update.effective_chat.id, final_text)
 
     kb = [[
         InlineKeyboardButton("Источник", web_app=WebAppInfo(url=update_url)),
@@ -414,6 +434,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     ]]
     await update.message.reply_text("Смотреть на сайте:", reply_markup=InlineKeyboardMarkup(kb))
     return ConversationHandler.END
+
 
 async def handle_leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -753,45 +774,23 @@ def main():
         states={
             GET_DOTA_ID: [MessageHandler(filters.Regex(r'^\d+$'), get_dota_id)]
         },
-        fallbacks=[
-            CommandHandler("cancel", cancel_dota_stats),
-            MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button),
-            MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button),
-            MessageHandler(filters.Regex(r'^Ладдер$'), handle_leaderboard_button),
-            MessageHandler(filters.TEXT, cancel_dota_stats)
-        ],
-        per_user=True,
+        fallbacks=[CommandHandler("cancel", cancel_dota_stats)],
     )
-    application.add_handler(dota_stats_conv_handler)
 
     application.add_handler(CommandHandler("start", start))
-    
-    application.add_handler(CommandHandler("previewlog", preview_log))
-    application.add_handler(CommandHandler("getlog", get_log))
-
+    application.add_handler(CommandHandler("log_preview", preview_log))
+    application.add_handler(CommandHandler("get_log", get_log))
+    application.add_handler(dota_stats_conv_handler)
     application.add_handler(MessageHandler(filters.Regex(r'^Обновления$'), handle_updates_button))
-    application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     application.add_handler(MessageHandler(filters.Regex(r'^Ладдер$'), handle_leaderboard_button))
-    
+    application.add_handler(MessageHandler(filters.Regex(r'^Герои$'), handle_heroes_button))
     application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r'^attribute_'))
     application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r'^hero_name_'))
-    application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_'))
-    
+    application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r'^back_to_attributes'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_unknown_message))
 
-    try:
-        application.run_polling()
-    except Conflict as e:
-        logger.warning(f"Conflict error on startup: {e}. Attempting to recover...")
-        try:
-            application.updater.bot.delete_webhook()
-            application.run_polling()
-        except Exception as inner_e:
-            logger.error(f"Failed to recover from conflict: {inner_e}")
-            
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
 if __name__ == "__main__":
-    if not OWNER_ID:
-        logger.error("OWNER_ID не установлен в переменных окружения. Пожалуйста, добавьте его.")
-        exit(1)
-        
     main()
