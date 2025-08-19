@@ -294,16 +294,16 @@ async def cancel_dota_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await log_user_message(user, "Обновления")
-    await update.message.reply_text("🔎 Ищу последнее обновление...")
+    sent_message = await update.message.reply_text("🔎 Ищу последнее обновление...")
 
     latest_update_info = await fetch_json(API_UPDATES_URL)
     if not latest_update_info or not latest_update_info.get("data", {}).get("values"):
-        await update.message.reply_text("Не удалось получить информацию об обновлениях с API. Попробуйте позже.")
+        await sent_message.edit_text("Не удалось получить информацию об обновлениях с API. Попробуйте позже.")
         return ConversationHandler.END
 
     update_url_slug = latest_update_info["data"]["values"][0].get("url")
     if not update_url_slug:
-        await update.message.reply_text("В полученных данных нет ссылки на обновление. Попробуйте позже.")
+        await sent_message.edit_text("В полученных данных нет ссылки на обновление. Попробуйте позже.")
         return ConversationHandler.END
 
     update_url = urljoin(BASE_URL, f"/updates/{update_url_slug}")
@@ -311,7 +311,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     
     api_data = await fetch_json(api_update_url)
     if not api_data or not api_data.get("data"):
-        await update.message.reply_text("Произошла ошибка при получении данных об обновлении. Попробуйте позже.")
+        await sent_message.edit_text("Произошла ошибка при получении данных об обновлении. Попробуйте позже.")
         return ConversationHandler.END
 
     data = api_data.get("data")
@@ -414,20 +414,40 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     final_text = output_text.strip()
     
     if not final_text or final_text.strip() == f"*{escape_markdown_v2(title)}*":
-        await update.message.reply_text("Не удалось получить данные об изменениях. Возможно, раздел пуст.")
+        await sent_message.edit_text("Не удалось получить данные об изменениях. Возможно, раздел пуст.")
         return
         
-    await send_long_message(context, update.effective_chat.id, final_text)
-
     kb = [[
         InlineKeyboardButton("Источник", web_app=WebAppInfo(url=update_url)),
         InlineKeyboardButton("Все обновления", web_app=WebAppInfo(url=urljoin(BASE_URL, "/updates")))
     ]]
-    await update.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Смотреть на сайте:",
-        reply_markup=InlineKeyboardMarkup(kb)
-    )
+    markup = InlineKeyboardMarkup(kb)
+
+    # Вместо send_long_message, отправляем все одним сообщением, если это возможно, 
+    # иначе отправляем частями, а кнопки только в последнем.
+    message_parts = [part for part in final_text.split('\n') if part.strip()]
+    current_message = ""
+    
+    for i, part in enumerate(message_parts):
+        if len(current_message) + len(part) + 1 < 4096:
+            current_message += part + "\n"
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, 
+                text=current_message, 
+                parse_mode='MarkdownV2'
+            )
+            current_message = part + "\n"
+            
+    if current_message:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id, 
+            text=current_message, 
+            parse_mode='MarkdownV2',
+            reply_markup=markup
+        )
+    
+    await sent_message.delete()
     return ConversationHandler.END
 
 
