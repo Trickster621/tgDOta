@@ -275,7 +275,7 @@ async def get_dota_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if favorite_hero_url:
         hero_name = favorite_hero_url.replace("npc_dota_hero_", "").capitalize()
-        msg += f"Любимый герой: {escape_markdown_v2(hero_name)}\n" # <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+        msg += f"Любимый герой: {escape_markdown_v2(hero_name)}\n"
         
     if youtube_url:
         yt_status = EMOJI_MAP.get("online") if is_youtube_live else EMOJI_MAP.get("offline")
@@ -390,17 +390,20 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                             output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
 
-    items = data.get("items", []) # <-- ДОБАВЛЕНИЕ: ОБРАБОТКА ПРЕДМЕТОВ
+    items = data.get("items", [])
     if items:
         output_text += f"*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
         for item in items:
             item_name = item.get("userFriendlyName") or item.get("userFrendlyName") or "Неизвестный предмет"
-            output_text += f"*{escape_markdown_v2(f'Изменения для {item_name}')}*\n"
+            # Если ruRows есть, используем его для формирования текста
             if item.get("ruRows"):
                 rows_text = format_text_with_emojis(item['ruRows'])
+                # Новый предмет отображается с именем в самом ruRows, поэтому не добавляем его дважды.
+                # Также ruRows уже содержит жирный шрифт, который нужно экранировать.
                 lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                 for line in lines:
-                    output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                    output_text += f"{escape_markdown_v2(line)}\n"
+            
             output_text += "\n"
     
     final_text = output_text.strip()
