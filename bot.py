@@ -338,9 +338,8 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
         for item in items:
             ru_rows = item.get("ruRows")
             if ru_rows:
-                item_name = item.get('name', 'Неизвестный предмет')
-                item_emoji = SKILL_EMOJI_MAP.get(item_name.lower().replace(" ", "_"), "✨")
-                output_text += f"• {item_emoji} *{escape_markdown_v2(item_name.capitalize())}*\n"
+                item_name = item.get('name', 'Неизвестный предмет').replace("_", " ")
+                output_text += f"• *{escape_markdown_v2(item_name.capitalize())}*\n"
                 formatted_item_text = format_text_with_emojis(ru_rows)
                 lines = [line.strip() for line in formatted_item_text.split('\n') if line.strip()]
                 for line in lines:
@@ -367,8 +366,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         elif upgrade_type == 'shard':
                             upgrade_title = "Аганим шард"
                         
-                        output_text += f" {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
-                        output_text += f" {escape_markdown_v2(format_text_with_emojis(upgrade['ruRows']))}\n\n"
+                        output_text += f"• {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
+                        rows_text = format_text_with_emojis(upgrade['ruRows'])
+                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+                        for line in lines:
+                             output_text += f"  {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                        output_text += "\n"
+
 
             talents = hero.get("talents", [])
             if talents:
@@ -384,9 +388,17 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     elif talent.get("blueRuRows"):
                         talent_type_emoji = EMOJI_MAP.get("blue")
 
-                    if talent_name:
+                    display_name = ""
+                    skill_emoji = ""
+                    if talent_name.lower() == "hero_talent":
+                        display_name = "Талант героя"
+                    else:
                         skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower().replace(" ", "_"), "✨")
-                        output_text += f"\n{talent_type_emoji} {skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
+                        display_name = talent_name.capitalize()
+
+                    if display_name:
+                        output_text += f"\n{talent_type_emoji} {skill_emoji} *{escape_markdown_v2(display_name)}*\n"
+
                     
                     if talent.get("abilityRuRows"):
                         rows_text = format_text_with_emojis(talent['abilityRuRows'])
