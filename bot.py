@@ -723,67 +723,31 @@ async def handle_hero_selection(update: Update, context: ContextTypes.DEFAULT_TY
     
     await context.bot.send_message(
         chat_id=query.message.chat_id, 
-        text="Выберите следующий шаг:", 
+        text="Готово!",
         reply_markup=markup
     )
 
-async def handle_back_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "back_to_attributes":
-        keyboard = [
-            [InlineKeyboardButton("Strength", callback_data="attribute_Strength")],
-            [InlineKeyboardButton("Agility", callback_data="attribute_Agility")],
-            [InlineKeyboardButton("Intellect", callback_data="attribute_Intellect")],
-            [InlineKeyboardButton("Universal", callback_data="attribute_All")],
-            [InlineKeyboardButton("Посмотреть на сайте", web_app=WebAppInfo(url=f"{BASE_URL}/heroes"))]
-        ]
-        await update.callback_query.message.edit_text("Выберите атрибут героя:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def preview_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != OWNER_ID:
-        await update.message.reply_text("У вас нет прав для выполнения этой команды.")
-        return
-    if not RECENT_MESSAGES:
-        await update.message.reply_text("Нет сообщений для отображения.")
-        return
-    log_text = "".join(RECENT_MESSAGES)
-    await send_long_message(context, update.effective_chat.id, escape_markdown_v2(log_text))
-
-def main():
+def main() -> None:
     application = Application.builder().token(TOKEN).build()
-    
-    # Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("log", preview_log))
-    
+
     conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^Проверить статистику$"), start_dota_stats),
-            MessageHandler(filters.Regex("^Обновления$"), handle_updates_button),
-            MessageHandler(filters.Regex("^Герои$"), handle_heroes_button),
-            MessageHandler(filters.Regex("^Ладдер$"), handle_leaderboard_button),
-        ],
+        entry_points=[MessageHandler(filters.Regex(re.compile(r"Проверить статистику", re.IGNORECASE)), start_dota_stats)],
         states={
-            GET_DOTA_ID: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)
-            ]
+            GET_DOTA_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dota_id)],
         },
         fallbacks=[CommandHandler("cancel", cancel_dota_stats)],
     )
-    
+
+    application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
+    application.add_handler(MessageHandler(filters.Regex(re.compile(r"Обновления", re.IGNORECASE)), handle_updates_button))
+    application.add_handler(MessageHandler(filters.Regex(re.compile(r"Ладдер", re.IGNORECASE)), handle_leaderboard_button))
+    application.add_handler(MessageHandler(filters.Regex(re.compile(r"Герои", re.IGNORECASE)), handle_heroes_button))
     application.add_handler(CallbackQueryHandler(handle_attribute_selection, pattern=r"^attribute_"))
     application.add_handler(CallbackQueryHandler(handle_hero_selection, pattern=r"^hero_"))
-    application.add_handler(CallbackQueryHandler(handle_back_buttons, pattern=r"^back_to_attributes"))
-    application.add_handler(CallbackQueryHandler(handle_heroes_button, pattern=r"^back_to_heroes"))
-    
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Conflict:
-        logger.warning("Conflict detected, polling will continue.")
+    application.add_handler(CallbackQueryHandler(handle_heroes_button, pattern="^back_to_attributes"))
 
-if __name__ == '__main__':
+    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+if __name__ == "__main__":
     main()
