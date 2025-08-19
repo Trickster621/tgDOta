@@ -187,7 +187,6 @@ def format_text_with_emojis(text):
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     max_length = 4096
     
-    # Мы экранируем текст уже на этапе формирования, поэтому здесь этого делать не нужно
     parts = text.split('\n')
     current_message = ""
     
@@ -586,7 +585,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if name == 'innate':
                 text_parts.append("")
                 formatted_desc = format_text_with_emojis(description)
-                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown_v2('Врожденная способность:')}*\n_{formatted_desc}_")
+                text_parts.append(f"• {EMOJI_MAP.get('innate', '')} *{escape_markdown_v2('Врожденная способность:')}*\n_{escape_markdown_v2(formatted_desc)}_")
             else:
                 text_parts.append("")
                 skill_name_lower = name.lower() if name else None
@@ -604,10 +603,10 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         formatted_name = f"{skill_emoji} {formatted_name}"
                     
                     formatted_desc = format_text_with_emojis(description)
-                    text_parts.append(f"• {formatted_name}: _{formatted_desc}_")
+                    text_parts.append(f"• {formatted_name}: _{escape_markdown_v2(formatted_desc)}_")
                 else:
                     formatted_desc = format_text_with_emojis(description)
-                    text_parts.append(f"• _{formatted_desc}_")
+                    text_parts.append(f"• _{escape_markdown_v2(formatted_desc)}_")
         text_parts.append("")
     
     if upgrades:
@@ -644,7 +643,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         value = extra_value_pair[1]
                         extra_values_text += f"_{format_text_with_emojis(key)}: {format_text_with_emojis(value)}_\n"
 
-                    text_parts.append(f"{extra_values_text}{description}")
+                    text_parts.append(f"{escape_markdown_v2(extra_values_text)}{escape_markdown_v2(description)}")
 
         text_parts.append("")
 
@@ -664,7 +663,7 @@ async def send_hero_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     if description:
                         text_parts.append("")
                         formatted_desc = format_text_with_emojis(description)
-                        text_parts.append(f"• {talent_emoji} {formatted_desc}")
+                        text_parts.append(f"• {talent_emoji} {escape_markdown_v2(formatted_desc)}")
             text_parts.append("")
 
     message_text = "\n".join(text_parts).strip()
