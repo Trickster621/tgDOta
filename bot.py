@@ -319,7 +319,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     output_text = f"*{escape_markdown_v2(title)}*\n\n"
     
     if data.get("ruRows"):
-        output_text += f"{escape_markdown_v2(format_text_with_emojis(data['ruRows']))}\n\n"
+        rows_text = format_text_with_emojis(data['ruRows'])
+        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+        change_emoji = get_change_emoji(data.get("changeType", ""))
+        for line in lines:
+            output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+        output_text += "\n"
         
     items = data.get("items", [])
     if items:
@@ -345,7 +350,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             output_text += f"*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n\n"
             
             if hero.get("ruRows"):
-                output_text += f"{escape_markdown_v2(format_text_with_emojis(hero['ruRows']))}\n\n"
+                rows_text = format_text_with_emojis(hero['ruRows'])
+                lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+                change_emoji = get_change_emoji(hero.get("changeType", ""))
+                for line in lines:
+                    output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+                output_text += "\n"
 
             upgrades = hero.get("upgrades", [])
             if upgrades:
@@ -423,8 +433,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     ]]
     markup = InlineKeyboardMarkup(kb)
 
-    # Вместо send_long_message, отправляем все одним сообщением, если это возможно, 
-    # иначе отправляем частями, а кнопки только в последнем.
     message_parts = [part for part in final_text.split('\n') if part.strip()]
     current_message = ""
     
