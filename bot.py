@@ -137,24 +137,24 @@ def escape_markdown_v2(text):
     escape_chars = r"[_*[\]()~`>#+\-=|{}.!]"
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-def format_text_from_html(text):
+def format_text_with_emojis(text):
     if not isinstance(text, str):
         return ""
 
-    formatted_text = re.sub(r'<br\s*?/><br\s*?>|<br\s*?><br\s*?>|<br><br>', '\n\n', text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'<br\s*?/>|<br>', '\n', formatted_text, flags=re.IGNORECASE)
-    formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
-    formatted_text = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', formatted_text)
-    
-    return formatted_text
+    formatted_text = text
 
-def format_text_with_emojis(text):
-    formatted_text = format_text_from_html(text)
-    
+    # Замена маркеров up, down, change
+    formatted_text = re.sub(r'\b(увеличен[оаы]?)\b', f'{EMOJI_MAP.get("up", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'\b(снижен[оаы]?)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'\b(изменен[оы]?)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'\b(изменено)\b', f'{EMOJI_MAP.get("change", "")} \\1', formatted_text, flags=re.IGNORECASE)
+    formatted_text = re.sub(r'\b(больше не)\b', f'{EMOJI_MAP.get("down", "")} \\1', formatted_text, flags=re.IGNORECASE)
+
+    # Замена названий способностей и предметов на эмодзи
     sorted_keys = sorted(COMBINED_EMOJI_MAP.keys(), key=len, reverse=True)
     for key in sorted_keys:
         emoji = COMBINED_EMOJI_MAP[key]
-        if key.lower() in ['scepter', 'shard', 'hero_talent', 'innate']:
+        if key.lower() in ['scepter', 'shard', 'hero_talent', 'innate', 'up', 'down', 'change']:
             continue
             
         pattern = r'\b' + re.escape(key) + r'\b'
@@ -364,7 +364,11 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
                     
                     if talent.get("abilityRuRows"):
-                        output_text += f" {escape_markdown_v2(format_text_with_emojis(talent['abilityRuRows']))}\n"
+                        rows_text = format_text_with_emojis(talent['abilityRuRows'])
+                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+                        for line in lines:
+                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                        output_text += "\n"
                     
                     if talent.get("orangeRuRows"):
                         output_text += f"🟧 {escape_markdown_v2('Легендарный талант')} 🟧\n"
