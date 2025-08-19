@@ -123,8 +123,8 @@ EMOJI_MAP = {
     "purple": "🟪", "blue": "🟦", "orange": "🟧", "scepter": "🔮",
     "innate": "🔥", "shard": "🔷", "up": "🟢", "down": "🔴",
     "change": "🟡", "hero_talent": "🤓",
-    "Aghanim Scepter": "🔮 Aghanim Scepter",
-    "Aghanim Shard": "🔷 Aghanim Shard",
+    "Aghanim Scepter": "🔮 Аганим",
+    "Aghanim Shard": "🔷 Аганим шард",
     "online": "🟩",
     "offline": "🟥"
 }
@@ -144,9 +144,6 @@ def format_text_with_emojis(text):
         return ""
 
     formatted_text = text
-
-    # УДАЛЕНИЕ: Убрана логика замены для слов 'увеличен', 'снижен' и 'изменен'.
-    # Это теперь будет обрабатываться через changeType.
     
     formatted_text = re.sub(r'<[^>]+>', '', formatted_text)
     
@@ -155,19 +152,6 @@ def format_text_with_emojis(text):
         emoji = SKILL_EMOJI_MAP[key]
         pattern = r'\b' + re.escape(key) + r'\b'
         formatted_text = re.sub(pattern, f"{emoji} {key}", formatted_text, flags=re.IGNORECASE)
-    
-    formatted_text = re.sub(
-        r'\bAghanim Scepter\b',
-        EMOJI_MAP.get("Aghanim Scepter", "🔮 Aghanim Scepter"),
-        formatted_text,
-        flags=re.IGNORECASE
-    )
-    formatted_text = re.sub(
-        r'\bAghanim Shard\b',
-        EMOJI_MAP.get("Aghanim Shard", "🔷 Aghanim Shard"),
-        formatted_text,
-        flags=re.IGNORECASE
-    )
     
     return formatted_text
 
