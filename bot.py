@@ -176,6 +176,16 @@ def format_text_with_emojis(text):
     
     return formatted_text
 
+def get_change_emoji(change_type: str) -> str:
+    """Возвращает эмодзи в зависимости от типа изменения."""
+    if change_type == "Up":
+        return EMOJI_MAP.get("up", "🟢")
+    elif change_type == "Down":
+        return EMOJI_MAP.get("down", "🔴")
+    elif change_type == "Change":
+        return EMOJI_MAP.get("change", "🟡")
+    return ""
+
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     max_length = 4096
     
@@ -340,10 +350,13 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
             if ru_rows:
                 item_name = item.get('name', 'Неизвестный предмет').replace("_", " ")
                 output_text += f"• *{escape_markdown_v2(item_name.capitalize())}*\n"
+                
+                change_emoji = get_change_emoji(item.get("changeType", ""))
                 formatted_item_text = format_text_with_emojis(ru_rows)
+                
                 lines = [line.strip() for line in formatted_item_text.split('\n') if line.strip()]
                 for line in lines:
-                    output_text += f"  {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                    output_text += f"  {change_emoji} {escape_markdown_v2(line)}\n"
                 output_text += "\n"
 
     heroes = data.get("heroes", [])
@@ -368,9 +381,12 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         
                         output_text += f"• {EMOJI_MAP.get(upgrade_type, '✨')} *{escape_markdown_v2(upgrade_title)}*\n"
                         rows_text = format_text_with_emojis(upgrade['ruRows'])
+                        
+                        change_emoji = get_change_emoji(upgrade.get("changeType", ""))
+                        
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                             output_text += f"  {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
+                             output_text += f"  {change_emoji} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
 
 
@@ -400,34 +416,21 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += f"\n{talent_type_emoji} {skill_emoji} *{escape_markdown_v2(display_name)}*\n"
 
                     
-                    if talent.get("abilityRuRows"):
-                        rows_text = format_text_with_emojis(talent['abilityRuRows'])
-                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
-                        for line in lines:
-                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
-                        output_text += "\n"
+                    talent_rows = [
+                        ("abilityRuRows", ""),
+                        ("orangeRuRows", EMOJI_MAP.get("orange", "")),
+                        ("purpleRuRows", EMOJI_MAP.get("purple", "")),
+                        ("blueRuRows", EMOJI_MAP.get("blue", ""))
+                    ]
                     
-                    if talent.get("orangeRuRows"):
-                        rows_text = format_text_with_emojis(talent['orangeRuRows'])
-                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
-                        for line in lines:
-                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
-                        output_text += "\n"
-                    
-                    if talent.get("purpleRuRows"):
-                        rows_text = format_text_with_emojis(talent['purpleRuRows'])
-                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
-                        for line in lines:
-                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
-                        output_text += "\n"
-                    
-                    if talent.get("blueRuRows"):
-                        rows_text = format_text_with_emojis(talent['blueRuRows'])
-                        lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
-                        for line in lines:
-                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
-                        output_text += "\n"
-                        
+                    for row_key, emoji_prefix in talent_rows:
+                        if talent.get(row_key):
+                            rows_text = format_text_with_emojis(talent[row_key])
+                            lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
+                            for line in lines:
+                                change_emoji = get_change_emoji(talent.get("changeType", ""))
+                                output_text += f" {change_emoji} {escape_markdown_v2(line)}\n"
+                            output_text += "\n"
 
     final_text = output_text.strip()
     
