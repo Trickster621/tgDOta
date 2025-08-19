@@ -337,23 +337,18 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
     title = data.get("ruName", "Без названия")
     output_text = f"*{escape_markdown_v2(title)}*\n\n"
     
-    # Общие изменения
     if data.get("ruRows"):
-        output_text += f"{format_text_with_emojis(data['ruRows'])}\n\n"
+        output_text += f"{escape_markdown_v2(format_text_with_emojis(data['ruRows']))}\n\n"
 
-    # Обработка героев
     heroes = data.get("heroes", [])
     if heroes:
         for hero in heroes:
-            # Ищем имя героя, учитывая возможную опечатку
             hero_name = hero.get('userFriendlyName') or hero.get('userFrendlyName') or 'Неизвестный герой'
             output_text += f"*{escape_markdown_v2(f'Изменения для {hero_name}')}*\n\n"
             
-            # Общие изменения героя
             if hero.get("ruRows"):
-                output_text += f"{format_text_with_emojis(hero['ruRows'])}\n\n"
+                output_text += f"{escape_markdown_v2(format_text_with_emojis(hero['ruRows']))}\n\n"
 
-            # Обработка аганима и шарда
             upgrades = hero.get("upgrades", [])
             if upgrades:
                 for upgrade in upgrades:
@@ -365,12 +360,11 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                             output_text += f"🔷 Аганим шард 🔷\n"
                         else:
                             continue
-                        output_text += f" {format_text_with_emojis(upgrade['ruRows'])}\n\n"
+                        output_text += f" {escape_markdown_v2(format_text_with_emojis(upgrade['ruRows']))}\n\n"
 
-            # Обработка талантов
             talents = hero.get("talents", [])
             if talents:
-                output_text += "🤓 *Таланты героя* 🤓\n"
+                output_text += "*Таланты героя*\n"
                 for talent in talents:
                     talent_name = talent.get('name', '')
                     
@@ -379,36 +373,35 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
                     
                     if talent.get("abilityRuRows"):
-                        output_text += f" {format_text_with_emojis(talent['abilityRuRows'])}\n"
+                        output_text += f" {escape_markdown_v2(format_text_with_emojis(talent['abilityRuRows']))}\n"
                     
                     if talent.get("orangeRuRows"):
-                        output_text += " 🟧 Легендарный талант 🟧\n"
+                        output_text += f"🟧 {escape_markdown_v2('Легендарный талант')} 🟧\n"
                         rows_text = format_text_with_emojis(talent['orangeRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                            output_text += f" - {line}\n"
+                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
                     
                     if talent.get("purpleRuRows"):
-                        output_text += " 🟪 Эпический талант 🟪\n"
+                        output_text += f"🟪 {escape_markdown_v2('Эпический талант')} 🟪\n"
                         rows_text = format_text_with_emojis(talent['purpleRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                            output_text += f" - {line}\n"
+                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
                     
                     if talent.get("blueRuRows"):
-                        output_text += " 🟦 Редкий талант 🟦\n"
+                        output_text += f"🟦 {escape_markdown_v2('Редкий талант')} 🟦\n"
                         rows_text = format_text_with_emojis(talent['blueRuRows'])
                         lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                         for line in lines:
-                            output_text += f" - {line}\n"
+                            output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
 
-    # Обработка предметов
     items = data.get("items", [])
     if items:
-        output_text += "*Корректировки Предметов*\n\n"
+        output_text += f"*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
         for item in items:
             item_name = item.get("userFriendlyName") or item.get("userFrendlyName") or "Неизвестный предмет"
             output_text += f"*{escape_markdown_v2(f'Изменения для {item_name}')}*\n"
@@ -416,7 +409,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                 rows_text = format_text_with_emojis(item['ruRows'])
                 lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
                 for line in lines:
-                    output_text += f" - {line}\n"
+                    output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
             output_text += "\n"
     
     final_text = output_text.strip()
