@@ -389,23 +389,18 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         for line in lines:
                             output_text += f" {escape_markdown_v2('-')} {escape_markdown_v2(line)}\n"
                         output_text += "\n"
-
+                        
     items = data.get("items", [])
     if items:
-        output_text += f"*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
+        output_text += f"\n*{escape_markdown_v2('Корректировки Предметов')}*\n\n"
         for item in items:
-            item_name = item.get("userFriendlyName") or item.get("userFrendlyName") or "Неизвестный предмет"
-            # Если ruRows есть, используем его для формирования текста
-            if item.get("ruRows"):
-                rows_text = format_text_with_emojis(item['ruRows'])
-                # Новый предмет отображается с именем в самом ruRows, поэтому не добавляем его дважды.
-                # Также ruRows уже содержит жирный шрифт, который нужно экранировать.
-                lines = [line.strip() for line in rows_text.split('\n') if line.strip()]
-                for line in lines:
-                    output_text += f"{escape_markdown_v2(line)}\n"
-            
-            output_text += "\n"
-    
+            ru_rows = item.get("ruRows")
+            if ru_rows:
+                formatted_item_text = format_text_with_emojis(ru_rows)
+                output_text += f"• {escape_markdown_v2(item.get('name', ''))}\n"
+                output_text += f"  {escape_markdown_v2(formatted_item_text)}\n\n"
+                
+
     final_text = output_text.strip()
     
     if not final_text or final_text.strip() == f"*{escape_markdown_v2(title)}*":
