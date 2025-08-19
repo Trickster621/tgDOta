@@ -188,18 +188,25 @@ def format_text_with_emojis(text):
 async def send_long_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, parse_mode='MarkdownV2'):
     max_length = 4096
     
-    parts = text.split('\n')
+    # Экранируем все символы в тексте перед разделением на части
+    safe_text = escape_markdown_v2(text)
+    
+    parts = safe_text.split('\n')
     current_message = ""
     
     for part in parts:
+        # Проверяем, не превысим ли лимит, добавляя текущую часть
         if len(current_message) + len(part) + 1 < max_length:
             current_message += part + "\n"
         else:
+            # Если превысим, отправляем текущее сообщение
             if current_message:
                 await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
                 await asyncio.sleep(0.5)
+            # Начинаем новое сообщение с текущей части
             current_message = part + "\n"
             
+    # Отправляем оставшуюся часть сообщения
     if current_message:
         await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode=parse_mode)
 
@@ -362,7 +369,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         elif upgrade_type == "shard":
                             output_text += "🔷 Аганим шард 🔷\n"
                         else:
-                            continue  # Пропускаем неизвестный тип
+                            continue
                         output_text += f" {format_text_with_emojis(upgrade['ruRows'])}\n\n"
 
             # Обработка талантов и способностей
@@ -379,11 +386,9 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         skill_emoji = SKILL_EMOJI_MAP.get(talent_name.lower().replace(" ", "_"), "✨")
                         output_text += f"\n{skill_emoji} *{escape_markdown_v2(talent_name.capitalize())}*\n"
                     
-                    # Изменения самой способности
                     if talent.get("abilityRuRows"):
                         output_text += f"  {format_text_with_emojis(talent['abilityRuRows'])}\n"
                     
-                    # Изменения талантов по цветам
                     if talent.get("orangeRuRows"):
                         output_text += f"  🟧 Легендарный талант 🟧\n"
                         formatted_rows = talent['orangeRuRows'].replace("\r\n", "\n").strip()
@@ -405,7 +410,7 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                         for line in lines:
                             output_text += f"   - {format_text_with_emojis(line)}\n"
 
-                output_text += "\n" # Пустая строка после блока талантов
+                output_text += "\n"
 
     # Обработка предметов
     if items:
@@ -419,7 +424,6 @@ async def handle_updates_button(update: Update, context: ContextTypes.DEFAULT_TY
                     output_text += f" - {format_text_with_emojis(line)}\n"
             output_text += "\n"
 
-    # Удаляем лишние пробелы и пустые строки в начале и конце
     final_text = output_text.strip()
     
     if not final_text or final_text.strip() == f"*{escape_markdown_v2(title)}*":
